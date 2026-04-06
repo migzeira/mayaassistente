@@ -399,6 +399,9 @@ export default function AdminPanel() {
       {/* Header */}
       <header className="border-b border-border px-6 py-4 flex items-center justify-between bg-card/50 backdrop-blur-sm sticky top-0 z-30">
         <div className="flex items-center gap-3">
+          <Button size="sm" variant="ghost" onClick={() => window.location.href = "/dashboard"} className="mr-1">
+            <ChevronLeft className="h-4 w-4 mr-1" /> Dashboard
+          </Button>
           <Shield className="h-6 w-6 text-purple-400" />
           <h1 className="text-xl font-bold">Admin Master — Minha Maya</h1>
           <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30">{stats.totalUsers} usuários</Badge>

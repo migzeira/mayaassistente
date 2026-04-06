@@ -16,9 +16,10 @@ import Financas from "./pages/dashboard/Financas";
 import Agenda from "./pages/dashboard/Agenda";
 import Anotacoes from "./pages/dashboard/Anotacoes";
 import Conversas from "./pages/dashboard/Conversas";
+import Lembretes from "./pages/dashboard/Lembretes";
 import Integracoes from "./pages/dashboard/Integracoes";
 import ConfigAgente from "./pages/dashboard/ConfigAgente";
-import MeuPlano from "./pages/dashboard/MeuPlano";
+
 import MeuPerfil from "./pages/dashboard/MeuPerfil";
 import AdminPanel from "./pages/admin/AdminPanel";
 import NotFound from "./pages/NotFound";
@@ -48,9 +49,10 @@ const App = () => (
               <Route path="agenda" element={<Agenda />} />
               <Route path="anotacoes" element={<Anotacoes />} />
               <Route path="conversas" element={<Conversas />} />
+              <Route path="lembretes" element={<Lembretes />} />
               <Route path="integracoes" element={<Integracoes />} />
               <Route path="agente" element={<ConfigAgente />} />
-              <Route path="plano" element={<MeuPlano />} />
+              
               <Route path="perfil" element={<MeuPerfil />} />
             </Route>
             <Route path="/admin" element={<ProtectedRoute><AdminPanel /></ProtectedRoute>} />
