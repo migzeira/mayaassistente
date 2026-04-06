@@ -670,6 +670,8 @@ function PricingSection() {
   );
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   PAGE
 ───────────────────────────────────────────────────────────────────────────── */
 export default function Index() {
   const [scrolled, setScrolled] = useState(false);
