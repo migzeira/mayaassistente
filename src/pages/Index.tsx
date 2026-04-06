@@ -96,20 +96,8 @@ const PLAN_FEATURES = [
    LOGO COMPONENTS (fallback quando imagens não estão na pasta public/)
 ───────────────────────────────────────────────────────────────────────────── */
 function LogoFull() {
-  const [err, setErr] = useState(false);
-  if (err) return (
-    <div className="flex items-center gap-2.5">
-      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/40">
-        <MessageCircle className="h-4 w-4 text-white" />
-      </div>
-      <span className="text-[17px] font-bold tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-        Minha Maya
-      </span>
-    </div>
-  );
   return (
-    <img src="/logo-full.png" alt="Minha Maya" className="h-8 w-auto object-contain"
-      onError={() => setErr(true)} />
+    <img src={logoEscrita} alt="Minha Maya" className="h-8 w-auto object-contain" />
   );
 }
 
