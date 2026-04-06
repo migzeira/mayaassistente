@@ -1125,11 +1125,11 @@ export default function Index() {
             ].map((s, i) => (
               <AnimateIn key={i} delay={i * 80}>
                 <div className={`rounded-2xl border ${s.border} bg-gradient-to-b ${s.color} p-6 text-center`}>
-                  <p className={`text-[10px] font-bold uppercase tracking-widest mb-3 ${s.textCls}`}>{s.label}</p>
-                  <p className="text-[38px] font-extrabold text-white leading-none" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                  <p className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-widest mb-3 ${s.textCls} truncate`}>{s.label}</p>
+                  <p className="text-[28px] sm:text-[38px] font-extrabold text-white leading-none" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                     <span>+</span><Counter to={s.val} suffix="" />{s.suffix}
                   </p>
-                  <p className="text-[12px] text-gray-400 mt-2">{s.sub}</p>
+                  <p className="text-[11px] sm:text-[12px] text-gray-400 mt-2">{s.sub}</p>
                 </div>
               </AnimateIn>
             ))}
