@@ -18,7 +18,7 @@ import Anotacoes from "./pages/dashboard/Anotacoes";
 import Conversas from "./pages/dashboard/Conversas";
 import Integracoes from "./pages/dashboard/Integracoes";
 import ConfigAgente from "./pages/dashboard/ConfigAgente";
-import MeuPlano from "./pages/dashboard/MeuPlano";
+
 import MeuPerfil from "./pages/dashboard/MeuPerfil";
 import AdminPanel from "./pages/admin/AdminPanel";
 import NotFound from "./pages/NotFound";
