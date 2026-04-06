@@ -3,4 +3,4 @@ Allow: /
 Disallow: /dashboard
 Disallow: /admin
 
-Sitemap: https://mayachat.com.br/sitemap.xml
+Sitemap: https://minhamaya.com.br/sitemap.xml

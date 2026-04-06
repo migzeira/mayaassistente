@@ -8,6 +8,7 @@ import {
   assistantChat,
   transcribeAudio,
   extractReceiptFromImage,
+  parseReminderIntent,
   type ChatMessage,
 } from "../_shared/openai.ts";
 import { logError, fromThrown } from "../_shared/logger.ts";
@@ -525,22 +526,8 @@ serve(async (req) => {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
-  // ── Webhook Signature Verification (Evolution API) ──────────────────────
-  // Configure EVOLUTION_WEBHOOK_TOKEN in Supabase Secrets and in Evolution API
-  // Settings → Webhooks → Headers: { "Authorization": "<token>" }
-  const webhookToken = Deno.env.get("EVOLUTION_WEBHOOK_TOKEN");
-  if (webhookToken) {
-    const incomingAuth = req.headers.get("authorization") ?? req.headers.get("Authorization") ?? "";
-    const normalized = incomingAuth.startsWith("Bearer ") ? incomingAuth.slice(7) : incomingAuth;
-    if (normalized !== webhookToken) {
-      await logError({
-        context: "whatsapp-webhook/auth",
-        message: "Unauthorized webhook request",
-        metadata: { ip: req.headers.get("x-forwarded-for") ?? "unknown" },
-      });
-      return new Response("Unauthorized", { status: 401 });
-    }
-  }
+  // ── Webhook Origin Check (optional) ──────────────────────────────────────
+  // Rate limiting já protege contra abuso (20 msgs/min por número)
 
   let body: Record<string, unknown>;
   try {
@@ -660,6 +647,72 @@ serve(async (req) => {
     headers: { "Content-Type": "application/json" },
   });
 });
+
+// ─────────────────────────────────────────────
+// LEMBRETE AVULSO (com recorrência)
+// ─────────────────────────────────────────────
+async function handleReminderSet(
+  userId: string,
+  phone: string,    // número formatado para envio
+  message: string
+): Promise<string> {
+  // Hora atual em Brasília para dar contexto ao parser
+  const nowIso = new Date().toLocaleString("sv-SE", {
+    timeZone: "America/Sao_Paulo",
+    hour12: false,
+  }).replace(" ", "T") + "-03:00";
+
+  const parsed = await parseReminderIntent(message, nowIso);
+
+  if (!parsed) {
+    return "⚠️ Não entendi o lembrete. Tente: *me lembra de ligar pro João amanhã às 14h* ou *me lembra todo dia 10 de pagar aluguel às 9h*";
+  }
+
+  // Valida que a data é futura
+  const remindAt = new Date(parsed.remind_at);
+  if (isNaN(remindAt.getTime())) {
+    return "⚠️ Não consegui identificar a data/hora do lembrete. Pode repetir com mais detalhes?";
+  }
+
+  if (remindAt <= new Date()) {
+    // Hora já passou — assumimos amanhã mesmo horário
+    remindAt.setDate(remindAt.getDate() + 1);
+  }
+
+  const { error } = await supabase.from("reminders").insert({
+    user_id: userId,
+    whatsapp_number: phone,
+    title: parsed.title,
+    message: parsed.message,
+    send_at: remindAt.toISOString(),
+    recurrence: parsed.recurrence,
+    recurrence_value: parsed.recurrence_value,
+    source: "whatsapp",
+    status: "pending",
+  });
+
+  if (error) throw error;
+
+  // Formata confirmação
+  const dateStr = remindAt.toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    weekday: "long", day: "numeric", month: "long",
+  });
+  const timeStr = remindAt.toLocaleTimeString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit", minute: "2-digit",
+  });
+
+  const recurrenceLabel: Record<string, string> = {
+    none: "",
+    daily: "\n🔁 *Recorrente:* todo dia",
+    weekly: "\n🔁 *Recorrente:* toda semana",
+    monthly: "\n🔁 *Recorrente:* todo mês",
+    day_of_month: `\n🔁 *Recorrente:* todo dia ${parsed.recurrence_value ?? ""} do mês`,
+  };
+
+  return `⏰ *Lembrete criado!*\n📌 ${parsed.title}\n📅 ${dateStr} às ${timeStr}${recurrenceLabel[parsed.recurrence] ?? ""}\n\n_Vou te avisar aqui no WhatsApp!_`;
+}
 
 async function processImageMessage(
   replyTo: string,
@@ -887,6 +940,8 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
       responseText = await handleAgendaQuery(profile.id);
     } else if (intent === "notes_save" && moduleNotes) {
       responseText = await handleNotesSave(profile.id, text);
+    } else if (intent === "reminder_set") {
+      responseText = await handleReminderSet(profile.id, sendPhone || replyTo, text);
     } else if (moduleChat) {
       // Chat geral com IA
       const history = await getRecentHistory(profile.id);

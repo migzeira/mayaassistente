@@ -1,4 +1,4 @@
-import { Home, Wallet, CalendarDays, StickyNote, MessageSquare, Link2, Settings, BarChart3, User, LogOut, MessageCircle, Menu, Shield } from "lucide-react";
+import { Home, Wallet, CalendarDays, StickyNote, MessageSquare, Link2, Settings, BarChart3, User, LogOut, MessageCircle, Menu, Shield, Bell } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
@@ -21,6 +21,7 @@ const menuItems = [
   { title: "Agenda", url: "/dashboard/agenda", icon: CalendarDays },
   { title: "Anotações", url: "/dashboard/anotacoes", icon: StickyNote },
   { title: "Conversas", url: "/dashboard/conversas", icon: MessageSquare },
+  { title: "Lembretes", url: "/dashboard/lembretes", icon: Bell },
   { title: "Integrações", url: "/dashboard/integracoes", icon: Link2 },
   { title: "Config. do Agente", url: "/dashboard/agente", icon: Settings },
   { title: "Meu Plano", url: "/dashboard/plano", icon: BarChart3 },
@@ -43,7 +44,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-border bg-sidebar">
       <div className="flex items-center gap-2 px-4 h-16 border-b border-border">
         <MessageCircle className="h-6 w-6 text-primary flex-shrink-0" />
-        {!collapsed && <span className="text-lg font-bold">MayaChat</span>}
+        {!collapsed && <span className="text-lg font-bold">Minha Maya</span>}
       </div>
       <SidebarContent className="pt-4">
         <SidebarGroup>

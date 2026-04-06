@@ -30,7 +30,7 @@ export default function ForgotPassword() {
         <CardHeader className="text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
             <MessageCircle className="h-8 w-8 text-primary" />
-            <span className="text-2xl font-bold text-foreground">MayaChat</span>
+            <span className="text-2xl font-bold text-foreground">Minha Maya</span>
           </div>
           <CardTitle className="text-xl">Recuperar senha</CardTitle>
           <CardDescription>

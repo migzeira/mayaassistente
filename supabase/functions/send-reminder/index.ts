@@ -2,6 +2,7 @@
  * send-reminder
  * Chamada pelo pg_cron a cada 1 minuto.
  * Busca lembretes pendentes cujo send_at <= agora e envia via WhatsApp.
+ * Suporta recorrência: cria próxima ocorrência automaticamente.
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -12,6 +13,50 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
 
+// ─────────────────────────────────────────────
+// Calcula a próxima data de um lembrete recorrente
+// ─────────────────────────────────────────────
+function nextOccurrence(
+  current: Date,
+  recurrence: string,
+  recurrenceValue: number | null
+): Date | null {
+  const next = new Date(current);
+
+  if (recurrence === "daily") {
+    next.setDate(next.getDate() + 1);
+    return next;
+  }
+
+  if (recurrence === "weekly") {
+    // recurrenceValue = dia da semana (0=dom..6=sáb)
+    const targetDay = recurrenceValue ?? current.getDay();
+    next.setDate(next.getDate() + 7);
+    // Ajusta para o dia correto da semana caso tenha desviado
+    while (next.getDay() !== targetDay) {
+      next.setDate(next.getDate() + 1);
+    }
+    return next;
+  }
+
+  if (recurrence === "monthly") {
+    next.setMonth(next.getMonth() + 1);
+    return next;
+  }
+
+  if (recurrence === "day_of_month") {
+    // recurrenceValue = dia do mês (1-31)
+    const day = recurrenceValue ?? current.getDate();
+    next.setMonth(next.getMonth() + 1);
+    // Garante o dia correto (tratando meses com menos dias)
+    const maxDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+    next.setDate(Math.min(day, maxDay));
+    return next;
+  }
+
+  return null; // "none" → sem próxima
+}
+
 serve(async (req) => {
   // Protege a rota: só aceita chamadas internas (cron ou service role)
   const authHeader = req.headers.get("Authorization");
@@ -20,21 +65,20 @@ serve(async (req) => {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const now = new Date().toISOString();
+  const now = new Date();
+  const nowIso = now.toISOString();
 
   // Busca lembretes pendentes
   const { data: reminders, error } = await supabase
     .from("reminders")
     .select("*")
     .eq("status", "pending")
-    .lte("send_at", now)
-    .limit(50); // processa até 50 por vez
+    .lte("send_at", nowIso)
+    .limit(50);
 
   if (error) {
     console.error("Error fetching reminders:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-    });
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 
   if (!reminders || reminders.length === 0) {
@@ -43,17 +87,40 @@ serve(async (req) => {
 
   let sent = 0;
   let failed = 0;
+  let scheduled = 0;
 
   for (const reminder of reminders) {
     try {
       await sendText(reminder.whatsapp_number, reminder.message);
 
+      // Marca como enviado
       await supabase
         .from("reminders")
-        .update({ status: "sent", sent_at: new Date().toISOString() })
+        .update({ status: "sent", sent_at: now.toISOString() })
         .eq("id", reminder.id);
 
       sent++;
+
+      // ── Recorrência: agenda próxima ocorrência ──────────────────
+      if (reminder.recurrence && reminder.recurrence !== "none") {
+        const sendAt = new Date(reminder.send_at);
+        const next = nextOccurrence(sendAt, reminder.recurrence, reminder.recurrence_value ?? null);
+
+        if (next) {
+          await supabase.from("reminders").insert({
+            user_id: reminder.user_id,
+            whatsapp_number: reminder.whatsapp_number,
+            title: reminder.title,
+            message: reminder.message,
+            send_at: next.toISOString(),
+            recurrence: reminder.recurrence,
+            recurrence_value: reminder.recurrence_value,
+            source: reminder.source ?? "whatsapp",
+            status: "pending",
+          });
+          scheduled++;
+        }
+      }
     } catch (err) {
       console.error(`Failed to send reminder ${reminder.id}:`, err);
 
@@ -66,6 +133,6 @@ serve(async (req) => {
     }
   }
 
-  console.log(`Reminders processed: ${sent} sent, ${failed} failed`);
-  return new Response(JSON.stringify({ sent, failed }));
+  console.log(`Reminders: ${sent} sent, ${failed} failed, ${scheduled} next scheduled`);
+  return new Response(JSON.stringify({ sent, failed, scheduled }));
 });

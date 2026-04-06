@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "sonner";
-import { Link2, HelpCircle, ChevronDown, Save } from "lucide-react";
+import { Link2, HelpCircle, ChevronDown, Save, ShieldCheck, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -30,12 +32,12 @@ const instructions: Record<string, string[]> = {
   google: [
     "Clique em Conectar Google",
     "Faça login com sua conta Google",
-    "Autorize o MayaChat a acessar Calendar e Sheets",
+    "Autorize a Minha Maya a acessar Calendar e Sheets",
     "Para Sheets: copie o ID da planilha (entre /d/ e /edit na URL)",
   ],
   notion: [
     "Clique em Conectar Notion",
-    "Selecione seu workspace e autorize o MayaChat",
+    "Selecione seu workspace e autorize a Minha Maya",
     "Cole o ID do database (parte após o último / antes do ? na URL)",
   ],
 };
@@ -48,6 +50,61 @@ export default function Integracoes() {
   const [sheetId, setSheetId] = useState("");
   const [notionDbId, setNotionDbId] = useState("");
   const [savingField, setSavingField] = useState<string | null>(null);
+
+  // ── Credenciais OAuth ────────────────────────────────────────────
+  const [credSettings, setCredSettings] = useState<Record<string, { value: string; configured: boolean }>>({});
+  const [credLoading, setCredLoading] = useState(true);
+  const [credSaving, setCredSaving] = useState(false);
+  const [googleClientId, setGoogleClientId] = useState("");
+  const [googleClientSecret, setGoogleClientSecret] = useState("");
+  const [notionClientId, setNotionClientId] = useState("");
+  const [notionClientSecret, setNotionClientSecret] = useState("");
+  const [dashboardUrl, setDashboardUrl] = useState("");
+
+  useEffect(() => { if (session?.access_token) loadCredentials(); }, [session]);
+
+  const loadCredentials = async () => {
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const res = await fetch(`${supabaseUrl}/functions/v1/admin-settings`, {
+        headers: { Authorization: `Bearer ${session!.access_token}` },
+      });
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        const map: Record<string, { value: string; configured: boolean }> = {};
+        data.forEach((s: any) => { map[s.key] = { value: s.value || "", configured: !!s.configured }; });
+        setCredSettings(map);
+      }
+    } catch { /* silently fail */ }
+    setCredLoading(false);
+  };
+
+  const saveCredentials = async () => {
+    setCredSaving(true);
+    try {
+      const body: Record<string, string> = {};
+      if (googleClientId) body.google_client_id = googleClientId;
+      if (googleClientSecret) body.google_client_secret = googleClientSecret;
+      if (notionClientId) body.notion_client_id = notionClientId;
+      if (notionClientSecret) body.notion_client_secret = notionClientSecret;
+      if (dashboardUrl) body.dashboard_url = dashboardUrl;
+      if (Object.keys(body).length === 0) { toast.error("Preencha pelo menos um campo"); setCredSaving(false); return; }
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const res = await fetch(`${supabaseUrl}/functions/v1/admin-settings`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session!.access_token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error("Erro");
+      toast.success("Credenciais salvas!");
+      setGoogleClientId(""); setGoogleClientSecret(""); setNotionClientId(""); setNotionClientSecret(""); setDashboardUrl("");
+      loadCredentials();
+    } catch { toast.error("Erro ao salvar credenciais"); }
+    setCredSaving(false);
+  };
+
+  const isConfigured = (key: string) => credSettings[key]?.configured ?? false;
+  const maskedValue = (key: string) => credSettings[key]?.value || "";
 
   // Detect OAuth return params
   useEffect(() => {
@@ -284,19 +341,178 @@ export default function Integracoes() {
     );
   };
 
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const callbackUrl = `${supabaseUrl}/functions/v1/oauth-callback`;
+  const googleConfigured = isConfigured("google_client_id") && isConfigured("google_client_secret");
+  const notionConfigured = isConfigured("notion_client_id") && isConfigured("notion_client_secret");
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <h1 className="text-2xl font-bold">Integrações</h1>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {integrations.map((i) => renderCard(i))}
-        {integrations.length === 0 && (
-          <Card className="bg-card border-border col-span-full">
-            <CardContent className="py-12 text-center">
-              <Link2 className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-muted-foreground">Nenhuma integração disponível.</p>
-            </CardContent>
-          </Card>
+
+      {/* ── Integrações conectadas ── */}
+      <div>
+        <h2 className="text-base font-semibold mb-4 text-muted-foreground uppercase tracking-wide text-xs">Serviços conectados</h2>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {integrations.map((i) => renderCard(i))}
+          {integrations.length === 0 && (
+            <Card className="bg-card border-border col-span-full">
+              <CardContent className="py-12 text-center">
+                <Link2 className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
+                <p className="text-muted-foreground">Nenhuma integração disponível.</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {/* ── Credenciais OAuth ── */}
+      <div className="border-t border-border pt-8">
+        <div className="flex items-center gap-3 mb-1">
+          <ShieldCheck className="h-5 w-5 text-muted-foreground" />
+          <h2 className="text-lg font-bold">Credenciais OAuth</h2>
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">
+          Configure as credenciais necessárias para que Google e Notion funcionem. Faça isso antes de conectar.
+        </p>
+        <div className="flex items-start gap-2 mb-5 p-3 rounded-md bg-yellow-500/5 border border-yellow-500/20">
+          <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
+          <p className="text-xs text-muted-foreground">
+            Essas credenciais são do <strong>app OAuth</strong> que você criará no Google Console / Notion (não sua senha pessoal).
+            Deixe em branco para manter o valor atual já salvo.
+          </p>
+        </div>
+
+        {credLoading ? (
+          <div className="space-y-3">{[1,2,3].map(i => <Skeleton key={i} className="h-16" />)}</div>
+        ) : (
+          <Accordion type="multiple" defaultValue={[]} className="space-y-3">
+            {/* Google OAuth */}
+            <AccordionItem value="google" className="border border-border rounded-xl bg-card px-4">
+              <AccordionTrigger className="hover:no-underline py-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">🔑</span>
+                  <span className="font-medium text-sm">Google OAuth</span>
+                  <Badge
+                    variant={googleConfigured ? "default" : "secondary"}
+                    className={googleConfigured ? "bg-success/20 text-success border-success/30 text-[10px]" : "text-[10px]"}
+                  >
+                    {googleConfigured ? "✓ Configurado" : "Não configurado"}
+                  </Badge>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="space-y-4 pb-5">
+                <div className="text-xs text-muted-foreground space-y-1 bg-muted/20 rounded-md p-3">
+                  <p className="font-medium text-foreground">Como obter:</p>
+                  <p>1. Acesse <span className="font-mono">console.cloud.google.com</span> → Credenciais → OAuth 2.0</p>
+                  <p>2. Tipo: <strong>Aplicativo Web</strong></p>
+                  <p>3. URI de redirecionamento autorizado:</p>
+                  <code className="block bg-muted/40 rounded px-2 py-1 text-[11px] mt-1 break-all select-all">{callbackUrl}</code>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs">Google Client ID</Label>
+                    <Input
+                      value={googleClientId}
+                      onChange={e => setGoogleClientId(e.target.value)}
+                      placeholder={isConfigured("google_client_id") ? "Já configurado — cole para atualizar" : "Obtenha em console.cloud.google.com"}
+                      className="text-xs font-mono"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Google Client Secret</Label>
+                    <Input
+                      type="password"
+                      value={googleClientSecret}
+                      onChange={e => setGoogleClientSecret(e.target.value)}
+                      placeholder={isConfigured("google_client_secret") ? "Já configurado — cole para atualizar" : "Segredo do cliente OAuth"}
+                      className="text-xs font-mono"
+                    />
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* Notion OAuth */}
+            <AccordionItem value="notion" className="border border-border rounded-xl bg-card px-4">
+              <AccordionTrigger className="hover:no-underline py-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">📝</span>
+                  <span className="font-medium text-sm">Notion OAuth</span>
+                  <Badge
+                    variant={notionConfigured ? "default" : "secondary"}
+                    className={notionConfigured ? "bg-success/20 text-success border-success/30 text-[10px]" : "text-[10px]"}
+                  >
+                    {notionConfigured ? "✓ Configurado" : "Não configurado"}
+                  </Badge>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="space-y-4 pb-5">
+                <div className="text-xs text-muted-foreground space-y-1 bg-muted/20 rounded-md p-3">
+                  <p className="font-medium text-foreground">Como obter:</p>
+                  <p>1. Acesse <span className="font-mono">notion.so/my-integrations</span> → Nova integração</p>
+                  <p>2. Tipo: <strong>Público</strong></p>
+                  <p>3. URI de redirecionamento:</p>
+                  <code className="block bg-muted/40 rounded px-2 py-1 text-[11px] mt-1 break-all select-all">{callbackUrl}</code>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs">Notion Client ID</Label>
+                    <Input
+                      value={notionClientId}
+                      onChange={e => setNotionClientId(e.target.value)}
+                      placeholder={isConfigured("notion_client_id") ? "Já configurado — cole para atualizar" : "notion.so/my-integrations"}
+                      className="text-xs font-mono"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Notion Client Secret</Label>
+                    <Input
+                      type="password"
+                      value={notionClientSecret}
+                      onChange={e => setNotionClientSecret(e.target.value)}
+                      placeholder={isConfigured("notion_client_secret") ? "Já configurado — cole para atualizar" : "Segredo da integração"}
+                      className="text-xs font-mono"
+                    />
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* Geral */}
+            <AccordionItem value="general" className="border border-border rounded-xl bg-card px-4">
+              <AccordionTrigger className="hover:no-underline py-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">⚙️</span>
+                  <span className="font-medium text-sm">Geral</span>
+                  <Badge
+                    variant={isConfigured("dashboard_url") ? "default" : "secondary"}
+                    className={isConfigured("dashboard_url") ? "bg-success/20 text-success border-success/30 text-[10px]" : "text-[10px]"}
+                  >
+                    {isConfigured("dashboard_url") ? "✓ Configurado" : "Não configurado"}
+                  </Badge>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="space-y-4 pb-5">
+                <div className="space-y-2">
+                  <Label className="text-xs">URL do Dashboard</Label>
+                  <p className="text-[11px] text-muted-foreground">Usado para redirecionar após o usuário conectar/desconectar uma integração</p>
+                  <Input
+                    value={dashboardUrl}
+                    onChange={e => setDashboardUrl(e.target.value)}
+                    placeholder={isConfigured("dashboard_url") ? "Já configurado — cole para atualizar" : "https://seusite.com/dashboard/integracoes"}
+                    className="text-xs font-mono"
+                  />
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         )}
+
+        <Button onClick={saveCredentials} disabled={credSaving} className="mt-5 gap-2">
+          <ShieldCheck className="h-4 w-4" />
+          {credSaving ? "Salvando..." : "Salvar credenciais"}
+        </Button>
       </div>
     </div>
   );
