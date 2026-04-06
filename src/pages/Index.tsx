@@ -537,7 +537,139 @@ function Background() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   PAGE
+   PRICING SECTION — monthly / annual toggle with animated counter
+───────────────────────────────────────────────────────────────────────────── */
+function AnimatedPrice({ value, suffix }: { value: number; suffix: string }) {
+  const [displayed, setDisplayed] = useState(value);
+  const prev = useRef(value);
+
+  useEffect(() => {
+    const from = prev.current;
+    const to = value;
+    prev.current = value;
+    if (from === to) return;
+    const t0 = performance.now();
+    const dur = 600;
+    const tick = (now: number) => {
+      const p = Math.min((now - t0) / dur, 1);
+      const ease = 1 - Math.pow(1 - p, 3);
+      setDisplayed(Math.round(from + (to - from) * ease) / 100 * 100 === 0 ? from + (to - from) * ease : from + (to - from) * ease);
+      if (p < 1) requestAnimationFrame(tick);
+      else setDisplayed(to);
+    };
+    requestAnimationFrame(tick);
+  }, [value]);
+
+  const formatted = displayed % 1 === 0
+    ? displayed.toLocaleString("pt-BR")
+    : displayed.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  return (
+    <span className="text-[54px] font-extrabold text-white leading-none" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+      R${formatted}
+      <span className="text-gray-400 text-[14px] font-normal ml-1">{suffix}</span>
+    </span>
+  );
+}
+
+function PricingSection() {
+  const [annual, setAnnual] = useState(false);
+
+  const price = annual ? 287 : 29.90;
+  const oldPrice = annual ? "R$ 1.198" : "R$ 99,90";
+  const suffix = annual ? "/ano" : "/mês";
+  const link = annual
+    ? "https://pay.kirvano.com/59bde07b-9a4a-41a6-9009-48bb1e37c364"
+    : "https://pay.kirvano.com/4a308234-3702-4233-9d2a-4dce73bf0d2b";
+  const subtext = annual ? "Equivale a R$23,92/mês — economia de 76%!" : "Menos de R$1 por dia";
+
+  return (
+    <section id="planos" className="py-28 px-4">
+      <div className="max-w-lg mx-auto">
+        <AnimateIn>
+          <div className="text-center mb-10">
+            <h2 className="text-[40px] font-extrabold tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+              Um plano. Acesso a tudo.
+            </h2>
+            <p className="mt-3 text-[15px] text-gray-400">
+              Sem nível básico, sem funcionalidade bloqueada. Tudo incluso desde o primeiro dia.
+            </p>
+
+            {/* Toggle mensal/anual */}
+            <div className="mt-6 inline-flex items-center bg-white/[0.04] border border-white/10 rounded-full p-1 gap-0">
+              <button
+                onClick={() => setAnnual(false)}
+                className={`px-5 py-2 rounded-full text-[13px] font-medium transition-all duration-300 ${
+                  !annual ? "bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-lg shadow-violet-500/25" : "text-gray-400 hover:text-white"
+                }`}
+              >
+                Mensal
+              </button>
+              <button
+                onClick={() => setAnnual(true)}
+                className={`px-5 py-2 rounded-full text-[13px] font-medium transition-all duration-300 ${
+                  annual ? "bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-lg shadow-violet-500/25" : "text-gray-400 hover:text-white"
+                }`}
+              >
+                Anual
+                <span className="ml-1.5 text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-full font-bold">-76%</span>
+              </button>
+            </div>
+          </div>
+        </AnimateIn>
+
+        <AnimateIn from="scale" delay={80}>
+          <div className="relative rounded-2xl border border-violet-500/40 bg-[#0d0d1a] overflow-hidden shadow-2xl shadow-violet-500/10">
+            <div className="bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-white" />
+                <span className="text-[13px] font-bold text-white">Minha Maya Completo</span>
+              </div>
+              <span className="text-[11px] bg-white/20 text-white px-2.5 py-1 rounded-full font-medium">
+                Oferta de lançamento
+              </span>
+            </div>
+
+            <div className="p-8">
+              <div className="mb-2">
+                <p className="text-[14px] text-gray-500 line-through mb-1">DE {oldPrice}</p>
+                <div className="flex items-end gap-1 mb-1">
+                  <AnimatedPrice value={price} suffix={suffix} />
+                </div>
+                <p className="text-[13px] text-emerald-400">{subtext}</p>
+              </div>
+              <div className="inline-flex items-center gap-1.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[12px] font-medium px-3 py-1.5 rounded-full mb-6 mt-3">
+                <Check className="w-3 h-3" /> Acesso imediato após assinar
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 mb-8">
+                {PLAN_FEATURES.map((f) => (
+                  <div key={f} className="flex items-center gap-3 text-[13px] text-gray-300">
+                    <div className="w-4 h-4 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center flex-shrink-0">
+                      <Check className="w-2.5 h-2.5 text-violet-400" />
+                    </div>
+                    {f}
+                  </div>
+                ))}
+              </div>
+
+              <Button size="lg" asChild className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white h-13 rounded-xl shadow-xl shadow-violet-500/30 hover:shadow-violet-500/50 hover:-translate-y-0.5 transition-all duration-200 font-bold text-[16px]">
+                <a href={link} target="_blank" rel="noreferrer">Assinar agora</a>
+              </Button>
+
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-4 text-[12px] text-gray-500">
+                <span className="flex items-center gap-1"><Shield className="w-3.5 h-3.5" />Sem contrato</span>
+                <span className="flex items-center gap-1"><Lock className="w-3.5 h-3.5" />Dados seguros</span>
+                <span className="flex items-center gap-1"><RefreshCw className="w-3.5 h-3.5" />Cancele quando quiser</span>
+              </div>
+            </div>
+          </div>
+        </AnimateIn>
+      </div>
+    </section>
+  );
+}
+
 ───────────────────────────────────────────────────────────────────────────── */
 export default function Index() {
   const [scrolled, setScrolled] = useState(false);
