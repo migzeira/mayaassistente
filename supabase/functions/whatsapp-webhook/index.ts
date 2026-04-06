@@ -1,11 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sendText, extractPhone } from "../_shared/evolution.ts";
+import { sendText, extractPhone, downloadMediaBase64 } from "../_shared/evolution.ts";
 import { syncGoogleCalendar, syncGoogleSheets, syncNotion } from "../_shared/integrations.ts";
 import {
   extractTransactions,
   extractEvent,
   assistantChat,
+  transcribeAudio,
+  extractReceiptFromImage,
   type ChatMessage,
 } from "../_shared/openai.ts";
 
@@ -515,10 +517,48 @@ serve(async (req) => {
   const messageData = data?.message as Record<string, unknown>;
   const text =
     (messageData?.conversation as string) ||
-    (messageData?.extendedTextMessage as Record<string, unknown>)
-      ?.text as string;
+    (messageData?.extendedTextMessage as Record<string, unknown>)?.text as string;
 
   const pushName = (data?.pushName as string) || "";
+
+  // ─── Áudio (ptt = push-to-talk / audioMessage) ───────────────────────────
+  const audioMsg = messageData?.audioMessage ?? messageData?.pttMessage;
+  if (audioMsg) {
+    const media = await downloadMediaBase64(data);
+    if (media) {
+      let transcription = "";
+      try {
+        transcription = await transcribeAudio(media.base64, media.mimetype);
+      } catch (e) {
+        console.error("Transcription error:", e);
+        await sendText(replyTo, "⚠️ Não consegui transcrever o áudio. Tente enviar uma mensagem de texto.");
+        return new Response("OK");
+      }
+      if (!transcription) {
+        await sendText(replyTo, "⚠️ Não entendi o áudio. Pode repetir por texto?");
+        return new Response("OK");
+      }
+      const debugResult = await processMessage(replyTo, `[🎤 Áudio transcrito] ${transcription}`, lid, messageId, pushName, transcription);
+      return new Response(JSON.stringify({ ok: true, transcription, debug: debugResult }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return new Response("OK");
+  }
+
+  // ─── Imagem (nota fiscal / recibo) ───────────────────────────────────────
+  const imageMsg = messageData?.imageMessage;
+  if (imageMsg) {
+    const media = await downloadMediaBase64(data);
+    if (media) {
+      const debugResult = await processImageMessage(replyTo, media.base64, media.mimetype, lid, messageId, pushName);
+      return new Response(JSON.stringify({ ok: true, debug: debugResult }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return new Response("OK");
+  }
+
   if (!text?.trim()) {
     return new Response("OK");
   }
@@ -531,7 +571,47 @@ serve(async (req) => {
   });
 });
 
-async function processMessage(replyTo: string, text: string, lid: string | null = null, messageId?: string, pushName = ""): Promise<unknown> {
+async function processImageMessage(
+  replyTo: string,
+  base64: string,
+  mimetype: string,
+  lid: string | null,
+  messageId: string | undefined,
+  pushName: string
+): Promise<unknown> {
+  const log: string[] = ["image_processing"];
+  try {
+    const transactions = await extractReceiptFromImage(base64, mimetype);
+
+    if (transactions.length === 0) {
+      // Não é nota fiscal — apenas confirma recebimento
+      log.push("not_a_receipt");
+      // Tentamos encontrar o perfil para dar resposta personalizada
+      const phone = replyTo.replace(/@s\.whatsapp\.net$/, "").replace(/:\d+$/, "");
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("phone_number, account_status")
+        .or(`phone_number.eq.${phone},phone_number.eq.+${phone}`)
+        .maybeSingle();
+      const sendPhone = profile?.phone_number ?? replyTo;
+      await sendText(sendPhone, "📷 Recebi sua imagem! Não identifiquei como nota fiscal.\n\nPara registrar um gasto, me envie uma mensagem de texto. Ex: *gastei R$50 de almoço*");
+      return log;
+    }
+
+    // Salva como transação e processa igual texto
+    const fakeText = transactions.map(t =>
+      `${t.type === "expense" ? "gastei" : "recebi"} ${t.amount} reais de ${t.description}`
+    ).join(", ");
+
+    return await processMessage(replyTo, `[📷 Nota fiscal] ${fakeText}`, lid, messageId, pushName, fakeText);
+  } catch (err) {
+    log.push(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
+    console.error("processImageMessage error:", err);
+    return log;
+  }
+}
+
+async function processMessage(replyTo: string, text: string, lid: string | null = null, messageId?: string, pushName = "", _originalText?: string): Promise<unknown> {
   const log: string[] = [];
   try {
     // ── Fluxo de vinculação: usuário enviou código MAYA-XXXXXX ──
@@ -589,6 +669,24 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
         .or(`phone_number.eq.${phone},phone_number.eq.+${phone}`)
         .maybeSingle();
       profile = data;
+    }
+
+    // Fallback adicional: busca em user_phone_numbers (múltiplos números - plano business)
+    if (!profile) {
+      const phone = replyTo.replace(/@s\.whatsapp\.net$/, "").replace(/:\d+$/, "");
+      const { data: extraNum } = await supabase
+        .from("user_phone_numbers")
+        .select("user_id")
+        .or(`phone_number.eq.${phone},phone_number.eq.+${phone}`)
+        .maybeSingle();
+      if (extraNum?.user_id) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("id, plan, messages_used, messages_limit, phone_number, account_status")
+          .eq("id", extraNum.user_id)
+          .maybeSingle();
+        profile = data;
+      }
     }
 
     if (!profile) {

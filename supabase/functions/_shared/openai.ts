@@ -1,4 +1,5 @@
 const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+const GROQ_KEY = Deno.env.get("GROQ_API_KEY") ?? "";
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -109,6 +110,99 @@ Responda SOMENTE com o JSON.`;
     true
   );
   return JSON.parse(result);
+}
+
+/**
+ * Transcreve áudio via Groq Whisper (GROQ_API_KEY).
+ * Aceita base64 do arquivo de áudio + mimetype.
+ */
+export async function transcribeAudio(base64: string, mimetype: string): Promise<string> {
+  if (!GROQ_KEY) {
+    throw new Error("GROQ_API_KEY não configurada. Adicione no painel Supabase → Edge Functions → Secrets.");
+  }
+
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+  const ext = mimetype.includes("ogg") ? "ogg"
+    : mimetype.includes("mp4") ? "mp4"
+    : mimetype.includes("webm") ? "webm"
+    : "ogg";
+
+  const file = new File([bytes], `audio.${ext}`, { type: mimetype || "audio/ogg" });
+
+  const form = new FormData();
+  form.append("file", file);
+  form.append("model", "whisper-large-v3-turbo");
+  form.append("language", "pt");
+  form.append("response_format", "text");
+
+  const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${GROQ_KEY}` },
+    body: form,
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Groq Whisper error ${res.status}: ${err}`);
+  }
+
+  return (await res.text()).trim();
+}
+
+/**
+ * Analisa imagem com Claude Vision.
+ * Se for nota fiscal/recibo, extrai transações. Retorna array vazio se não for.
+ */
+export async function extractReceiptFromImage(
+  base64: string,
+  mimetype: string
+): Promise<Array<{ amount: number; description: string; type: "expense" | "income"; category: string }>> {
+  const mediaType = (mimetype || "image/jpeg") as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": ANTHROPIC_KEY,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 600,
+      system: "Você é um extrator de dados de notas fiscais. Responda APENAS com JSON válido, sem markdown.",
+      messages: [{
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: { type: "base64", media_type: mediaType, data: base64 },
+          },
+          {
+            type: "text",
+            text: `Analise esta imagem. Se for nota fiscal, cupom, recibo ou comprovante de pagamento, extraia as transações.
+Retorne JSON: { "is_receipt": true/false, "store": string ou null, "transactions": [{ "amount": número, "description": string, "type": "expense", "category": uma de [alimentacao, transporte, moradia, saude, lazer, educacao, trabalho, outros] }] }
+Se não for nota fiscal, retorne: { "is_receipt": false, "store": null, "transactions": [] }
+Responda SOMENTE com o JSON.`,
+          },
+        ],
+      }],
+    }),
+  });
+
+  if (!res.ok) return [];
+
+  const data = await res.json();
+  const text = (data.content?.[0]?.text as string) ?? "";
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed.is_receipt) return [];
+    return parsed.transactions ?? [];
+  } catch {
+    return [];
+  }
 }
 
 /** Chat geral com o assistente Maya */

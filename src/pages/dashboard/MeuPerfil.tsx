@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Save, Clock, CheckCircle, XCircle, Info } from "lucide-react";
+import { Save, Clock, CheckCircle, XCircle, Info, Plus, Trash2, Smartphone } from "lucide-react";
 
 const timezones = [
   "America/Sao_Paulo", "America/Fortaleza", "America/Manaus", "America/Cuiaba",
@@ -39,13 +39,46 @@ export default function MeuPerfil() {
   const { user } = useAuth();
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [extraNumbers, setExtraNumbers] = useState<any[]>([]);
+  const [newNumber, setNewNumber] = useState("");
+  const [newLabel, setNewLabel] = useState("");
 
   useEffect(() => { if (user) loadData(); }, [user]);
 
   const loadData = async () => {
-    const { data } = await supabase.from("profiles").select("*").eq("id", user!.id).single();
-    setProfile(data);
+    const [profileRes, numbersRes] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", user!.id).single(),
+      supabase.from("user_phone_numbers").select("*").eq("user_id", user!.id).order("created_at"),
+    ]);
+    setProfile(profileRes.data);
+    setExtraNumbers(numbersRes.data ?? []);
     setLoading(false);
+  };
+
+  const PLAN_MAX_NUMBERS: Record<string, number> = { starter: 1, pro: 2, business: 5 };
+  const maxExtra = (PLAN_MAX_NUMBERS[profile?.plan] ?? 1) - 1; // -1 pelo número principal
+
+  const addExtraNumber = async () => {
+    if (!newNumber.trim()) return;
+    const clean = newNumber.replace(/\D/g, "");
+    const { error } = await supabase.from("user_phone_numbers").insert({
+      user_id: user!.id,
+      phone_number: clean,
+      label: newLabel || null,
+    });
+    if (error) toast.error(error.message.includes("Limite") ? error.message : "Erro ao adicionar número");
+    else {
+      toast.success("Número adicionado!");
+      setNewNumber("");
+      setNewLabel("");
+      loadData();
+    }
+  };
+
+  const removeExtraNumber = async (id: string) => {
+    await supabase.from("user_phone_numbers").delete().eq("id", id);
+    toast.success("Número removido.");
+    loadData();
   };
 
   const handleSave = async () => {
@@ -111,6 +144,59 @@ export default function MeuPerfil() {
           <Button onClick={handleSave}><Save className="mr-2 h-4 w-4" /> Salvar perfil</Button>
         </CardContent>
       </Card>
+
+      {/* Múltiplos números (Pro = 2, Business = 5) */}
+      {profile?.plan !== "starter" && (
+        <Card className="bg-card border-border">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Smartphone className="h-4 w-4" />
+              Números adicionais
+              <Badge variant="secondary">{profile?.plan}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Seu plano permite até {PLAN_MAX_NUMBERS[profile?.plan] ?? 1} número(s). Números adicionais também ativam o assistente.
+            </p>
+
+            {extraNumbers.map(n => (
+              <div key={n.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border">
+                <Smartphone className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-mono">{n.phone_number}</p>
+                  {n.label && <p className="text-xs text-muted-foreground">{n.label}</p>}
+                </div>
+                <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => removeExtraNumber(n.id)}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+
+            {extraNumbers.length < maxExtra && (
+              <div className="flex gap-2">
+                <Input
+                  value={newNumber}
+                  onChange={e => setNewNumber(e.target.value)}
+                  placeholder="5511999999999"
+                  className="flex-1 font-mono"
+                />
+                <Input
+                  value={newLabel}
+                  onChange={e => setNewLabel(e.target.value)}
+                  placeholder="Rótulo (ex: Trabalho)"
+                  className="w-40"
+                />
+                <Button size="sm" onClick={addExtraNumber}><Plus className="h-4 w-4" /></Button>
+              </div>
+            )}
+
+            {extraNumbers.length >= maxExtra && maxExtra > 0 && (
+              <p className="text-xs text-muted-foreground italic">Limite de números atingido para o plano {profile?.plan}.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

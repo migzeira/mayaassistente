@@ -10,8 +10,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Plus, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { Plus, TrendingDown, TrendingUp, Wallet, RefreshCw, Trash2 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -57,6 +58,12 @@ export default function Financas() {
   const [catDialogOpen, setCatDialogOpen] = useState(false);
   const [newCat, setNewCat] = useState("");
   const [period, setPeriod] = useState<Period>("mes");
+  const [recurring, setRecurring] = useState<any[]>([]);
+  const [recurringDialog, setRecurringDialog] = useState(false);
+  const [recurringForm, setRecurringForm] = useState({
+    description: "", amount: "", type: "expense", category: "outros",
+    frequency: "monthly", next_date: format(new Date(), "yyyy-MM-dd"),
+  });
   const [filterType, setFilterType] = useState("all");
   const [filterCategory, setFilterCategory] = useState("all");
   const [form, setForm] = useState({
@@ -67,13 +74,46 @@ export default function Financas() {
   useEffect(() => { if (user) loadData(); }, [user]);
 
   const loadData = async () => {
-    const [txRes, catRes] = await Promise.all([
+    const [txRes, catRes, recRes] = await Promise.all([
       supabase.from("transactions").select("*").eq("user_id", user!.id).order("transaction_date", { ascending: false }).limit(500),
       supabase.from("categories").select("*").eq("user_id", user!.id).order("name"),
+      supabase.from("recurring_transactions").select("*").eq("user_id", user!.id).order("next_date"),
     ]);
     setTransactions(txRes.data ?? []);
     setCategories(catRes.data ?? []);
+    setRecurring(recRes.data ?? []);
     setLoading(false);
+  };
+
+  const handleAddRecurring = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { error } = await supabase.from("recurring_transactions").insert({
+      user_id: user!.id,
+      description: recurringForm.description,
+      amount: parseFloat(recurringForm.amount),
+      type: recurringForm.type,
+      category: recurringForm.category,
+      frequency: recurringForm.frequency,
+      next_date: recurringForm.next_date,
+    });
+    if (error) toast.error("Erro ao criar recorrente: " + error.message);
+    else {
+      toast.success("Transação recorrente criada!");
+      setRecurringDialog(false);
+      setRecurringForm({ description: "", amount: "", type: "expense", category: "outros", frequency: "monthly", next_date: format(new Date(), "yyyy-MM-dd") });
+      loadData();
+    }
+  };
+
+  const toggleRecurring = async (id: string, active: boolean) => {
+    await supabase.from("recurring_transactions").update({ active }).eq("id", id);
+    loadData();
+  };
+
+  const deleteRecurring = async (id: string) => {
+    await supabase.from("recurring_transactions").delete().eq("id", id);
+    toast.success("Removida!");
+    loadData();
   };
 
   const { start: periodStart, end: periodEnd } = getPeriodRange(period);
@@ -230,6 +270,14 @@ export default function Financas() {
         <TabsList>
           <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
           <TabsTrigger value="transacoes">Transações</TabsTrigger>
+          <TabsTrigger value="recorrentes">
+            <RefreshCw className="h-3.5 w-3.5 mr-1" />Recorrentes
+            {recurring.filter(r => r.active).length > 0 && (
+              <span className="ml-1.5 bg-primary text-primary-foreground text-[10px] font-bold rounded-full px-1.5 py-0.5">
+                {recurring.filter(r => r.active).length}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="categorias">Categorias</TabsTrigger>
         </TabsList>
 
@@ -385,6 +433,107 @@ export default function Financas() {
                         </div>
                       ))}
                     </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* RECORRENTES */}
+        <TabsContent value="recorrentes" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">Transações processadas automaticamente todo dia às 06:00.</p>
+            <Dialog open={recurringDialog} onOpenChange={setRecurringDialog}>
+              <DialogTrigger asChild>
+                <Button size="sm"><Plus className="mr-2 h-4 w-4" /> Nova recorrente</Button>
+              </DialogTrigger>
+              <DialogContent className="bg-card border-border">
+                <DialogHeader><DialogTitle>Transação recorrente</DialogTitle></DialogHeader>
+                <form onSubmit={handleAddRecurring} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Descrição</Label>
+                    <Input value={recurringForm.description} onChange={e => setRecurringForm({...recurringForm, description: e.target.value})} placeholder="Ex: Mensalidade academia" required />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Valor (R$)</Label>
+                      <Input type="number" step="0.01" min="0" value={recurringForm.amount} onChange={e => setRecurringForm({...recurringForm, amount: e.target.value})} required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Tipo</Label>
+                      <Select value={recurringForm.type} onValueChange={v => setRecurringForm({...recurringForm, type: v})}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="expense">Gasto</SelectItem>
+                          <SelectItem value="income">Receita</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Frequência</Label>
+                      <Select value={recurringForm.frequency} onValueChange={v => setRecurringForm({...recurringForm, frequency: v})}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="daily">Diária</SelectItem>
+                          <SelectItem value="weekly">Semanal</SelectItem>
+                          <SelectItem value="monthly">Mensal</SelectItem>
+                          <SelectItem value="yearly">Anual</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Próxima data</Label>
+                      <Input type="date" value={recurringForm.next_date} onChange={e => setRecurringForm({...recurringForm, next_date: e.target.value})} />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Categoria</Label>
+                    <Select value={recurringForm.category} onValueChange={v => setRecurringForm({...recurringForm, category: v})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <Button type="submit" className="w-full">Criar</Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          {recurring.length === 0 ? (
+            <Card className="bg-card border-border">
+              <CardContent className="py-12 text-center">
+                <RefreshCw className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
+                <p className="text-muted-foreground">Nenhuma transação recorrente.</p>
+                <p className="text-sm text-muted-foreground/60 mt-1">Crie recorrentes para salário, aluguel, assinaturas, etc.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {recurring.map(r => {
+                const freqLabel: Record<string, string> = { daily: "Diária", weekly: "Semanal", monthly: "Mensal", yearly: "Anual" };
+                return (
+                  <div key={r.id} className={`flex items-center gap-3 p-4 rounded-lg border transition-opacity ${r.active ? "bg-card border-border" : "bg-muted/30 border-border/50 opacity-60"}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${r.type === "expense" ? "bg-red-500/10" : "bg-green-500/10"}`}>
+                      {r.type === "expense" ? <TrendingDown className="h-4 w-4 text-destructive" /> : <TrendingUp className="h-4 w-4 text-green-400" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{r.description}</p>
+                      <div className="flex gap-2 mt-1">
+                        <Badge variant="secondary" className="text-xs">{r.category}</Badge>
+                        <Badge variant="outline" className="text-xs"><RefreshCw className="h-2.5 w-2.5 mr-1" />{freqLabel[r.frequency]}</Badge>
+                        <span className="text-xs text-muted-foreground">próxima: {format(new Date(r.next_date + "T12:00:00"), "dd/MM/yyyy")}</span>
+                      </div>
+                    </div>
+                    <p className={`text-sm font-semibold shrink-0 ${r.type === "expense" ? "text-destructive" : "text-green-400"}`}>
+                      R$ {Number(r.amount).toFixed(2)}
+                    </p>
+                    <Switch checked={r.active} onCheckedChange={v => toggleRecurring(r.id, v)} />
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteRecurring(r.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 );
               })}

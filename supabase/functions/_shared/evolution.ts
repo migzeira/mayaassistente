@@ -32,6 +32,27 @@ export async function sendImage(
   await evolutionPost(`/message/sendMedia/${INSTANCE}`, body);
 }
 
+/**
+ * Baixa mídia (áudio, imagem) de uma mensagem do Evolution API.
+ * Retorna base64 + mimetype ou null se falhar.
+ */
+export async function downloadMediaBase64(
+  messageData: Record<string, unknown>
+): Promise<{ base64: string; mimetype: string } | null> {
+  try {
+    const res = await evolutionPost(`/chat/getBase64FromMediaMessage/${INSTANCE}`, {
+      message: messageData,
+      convertToMp4: false,
+    }) as Record<string, unknown>;
+    if (res.base64 && res.mimetype) {
+      return { base64: res.base64 as string, mimetype: res.mimetype as string };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** Extrai número de telefone limpo do remoteJid do WhatsApp */
 export function extractPhone(remoteJid: string): string {
   return remoteJid
