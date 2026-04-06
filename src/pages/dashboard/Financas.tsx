@@ -171,7 +171,7 @@ export default function Financas() {
     acc[t.category] = (acc[t.category] || 0) + Number(t.amount);
     return acc;
   }, {});
-  const topCategory = Object.entries(expensesByCategory).sort((a, b) => b[1] - a[1])[0];
+  const topCategory = Object.entries(expensesByCategory).sort((a, b) => (b[1] as number) - (a[1] as number))[0];
 
   // Pie chart data
   const pieData = Object.entries(expensesByCategory)
