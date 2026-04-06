@@ -1,4 +1,4 @@
-import { Home, Wallet, CalendarDays, StickyNote, MessageSquare, Link2, Settings, BarChart3, User, LogOut, MessageCircle, Menu } from "lucide-react";
+import { Home, Wallet, CalendarDays, StickyNote, MessageSquare, Link2, Settings, BarChart3, User, LogOut, MessageCircle, Menu, Shield } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
