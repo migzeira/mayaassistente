@@ -112,10 +112,10 @@ async function handleApproved(
   const messagesLimit = PLAN_LIMITS[plan] ?? 500;
 
   if (existingUser) {
-    // Atualiza plano do usuário existente
+    // Atualiza plano + ativa conta do usuário existente
     await supabase
       .from("profiles")
-      .update({ plan, messages_limit: messagesLimit, messages_used: 0 })
+      .update({ plan, messages_limit: messagesLimit, messages_used: 0, account_status: "active" })
       .eq("id", existingUser.id);
 
     console.log(`Updated plan for existing user: ${email} → ${plan}`);
@@ -142,7 +142,7 @@ async function handleApproved(
   if (!newUser.user) return;
 
   // O trigger on_auth_user_created já cria o profile automaticamente.
-  // Só precisamos atualizar com os dados do pagamento.
+  // Só precisamos atualizar com os dados do pagamento e ativar a conta.
   await supabase
     .from("profiles")
     .update({
@@ -150,6 +150,7 @@ async function handleApproved(
       phone_number: phone ? phone.replace(/\D/g, "") : null,
       plan,
       messages_limit: messagesLimit,
+      account_status: "active",
     })
     .eq("id", newUser.user.id);
 
@@ -175,7 +176,7 @@ async function handleCanceled(email: string): Promise<void> {
 
   await supabase
     .from("profiles")
-    .update({ plan: "free", messages_limit: 0 })
+    .update({ plan: "free", messages_limit: 0, account_status: "suspended" })
     .eq("id", user.id);
 
   console.log(`Plan canceled for: ${email}`);

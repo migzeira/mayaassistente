@@ -569,16 +569,15 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
     }
 
     // ── Busca perfil por LID (novo WhatsApp) ou telefone (fallback) ──
-    let profile: { id: string; plan: string; messages_used: number; messages_limit: number; phone_number: string } | null = null;
+    let profile: { id: string; plan: string; messages_used: number; messages_limit: number; phone_number: string; account_status: string } | null = null;
 
     if (lid) {
       const { data } = await supabase
         .from("profiles")
-        .select("id, plan, messages_used, messages_limit, phone_number")
+        .select("id, plan, messages_used, messages_limit, phone_number, account_status")
         .eq("whatsapp_lid", lid)
         .maybeSingle();
       profile = data;
-      log.push(`lookup: lid → ${profile ? profile.id : "NOT FOUND"}`);
     }
 
     if (!profile) {
@@ -586,19 +585,16 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
       const phone = replyTo.replace(/@s\.whatsapp\.net$/, "").replace(/:\d+$/, "");
       const { data } = await supabase
         .from("profiles")
-        .select("id, plan, messages_used, messages_limit, phone_number")
+        .select("id, plan, messages_used, messages_limit, phone_number, account_status")
         .or(`phone_number.eq.${phone},phone_number.eq.+${phone}`)
         .maybeSingle();
       profile = data;
-      log.push(`lookup: phone(${phone}) → ${profile ? profile.id : "NOT FOUND"}`);
     }
-
-    log.push(`profile: ${profile ? profile.id : "NOT FOUND"}`);
 
     if (!profile) {
       await sendText(
         replyTo,
-        "❌ Conta não encontrada.\n\nPara usar o MayaChat:\n1. Acesse o app e vá em *Meu Perfil*\n2. Clique em *Conectar WhatsApp*\n3. Envie o código gerado aqui"
+        "❌ Conta não encontrada.\n\nPara usar o MayaChat:\n1. Acesse *mayachat.com.br* e crie sua conta\n2. Vá em *Meu Perfil* e cadastre seu número\n3. Aguarde a aprovação da sua conta"
       );
       return log;
     }
@@ -606,7 +602,16 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
     // Usa o telefone do perfil para enviar respostas (LID não funciona no sendText)
     const sendPhone = profile.phone_number?.replace(/\D/g, "") ?? "";
 
-    // 2. Verifica limite de mensagens
+    // 2. Verifica se a conta foi aprovada pelo admin
+    if (profile.account_status !== "active") {
+      await sendText(
+        sendPhone || replyTo,
+        "⏳ *Sua conta está aguardando aprovação.*\n\nAssim que o administrador aprovar seu acesso, você receberá uma confirmação aqui e poderá usar o MayaChat normalmente.\n\nQualquer dúvida, acesse o app."
+      );
+      return log;
+    }
+
+    // 3. Verifica limite de mensagens
     if (profile.messages_used >= profile.messages_limit) {
       await sendText(
         sendPhone,
