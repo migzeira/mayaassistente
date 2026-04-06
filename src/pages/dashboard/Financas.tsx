@@ -11,15 +11,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { Plus, TrendingDown, TrendingUp, Wallet, RefreshCw, Trash2 } from "lucide-react";
+import { Plus, TrendingDown, TrendingUp, Wallet, RefreshCw, Trash2, Download, DollarSign, Target, ArrowUpRight, ArrowDownRight, CalendarDays } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend,
+  PieChart, Pie, Cell, Legend, BarChart, Bar,
 } from "recharts";
 import {
   format, startOfMonth, endOfMonth, subMonths, startOfDay, endOfDay,
-  startOfWeek, endOfWeek, subYears, startOfYear, endOfYear, startOfQuarter, subQuarters, endOfQuarter,
+  startOfWeek, endOfWeek, differenceInDays,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -45,8 +46,22 @@ function getPeriodRange(period: Period): { start: Date; end: Date } {
     case "semana": return { start: startOfWeek(now, { locale: ptBR }), end: endOfWeek(now, { locale: ptBR }) };
     case "mes": return { start: startOfMonth(now), end: endOfMonth(now) };
     case "3meses": return { start: startOfMonth(subMonths(now, 2)), end: endOfMonth(now) };
-    case "ano": return { start: startOfYear(now), end: endOfYear(now) };
+    case "ano": {
+      const y = now.getFullYear();
+      return { start: new Date(y, 0, 1), end: new Date(y, 11, 31, 23, 59, 59) };
+    }
   }
+}
+
+function exportCSV(data: any[], filename: string) {
+  if (!data.length) return;
+  const keys = Object.keys(data[0]);
+  const csv = [keys.join(","), ...data.map(r => keys.map(k => `"${String(r[k] ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
 }
 
 export default function Financas() {
@@ -116,6 +131,12 @@ export default function Financas() {
     loadData();
   };
 
+  const handleDeleteTransaction = async (id: string) => {
+    const { error } = await supabase.from("transactions").delete().eq("id", id);
+    if (error) toast.error("Erro ao excluir");
+    else { toast.success("Transação excluída!"); loadData(); }
+  };
+
   const { start: periodStart, end: periodEnd } = getPeriodRange(period);
 
   const periodTx = transactions.filter(t => {
@@ -126,14 +147,36 @@ export default function Financas() {
   const totalExpenses = periodTx.filter(t => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
   const totalIncome = periodTx.filter(t => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
   const balance = totalIncome - totalExpenses;
+  const txCount = periodTx.length;
 
-  // Pie chart data (expenses by category)
-  const pieData = Object.entries(
-    periodTx.filter(t => t.type === "expense").reduce((acc: Record<string, number>, t) => {
-      acc[t.category] = (acc[t.category] || 0) + Number(t.amount);
-      return acc;
-    }, {})
-  ).map(([name, value]) => ({ name, value: value as number })).sort((a, b) => (b.value as number) - (a.value as number));
+  // Previous period comparison
+  const periodDays = Math.max(differenceInDays(periodEnd, periodStart), 1);
+  const prevStart = new Date(periodStart.getTime() - periodDays * 86400000);
+  const prevEnd = new Date(periodStart.getTime() - 1);
+  const prevTx = transactions.filter(t => {
+    const d = new Date(t.transaction_date + "T12:00:00");
+    return d >= prevStart && d <= prevEnd;
+  });
+  const prevExpenses = prevTx.filter(t => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
+  const prevIncome = prevTx.filter(t => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
+  const expenseChange = prevExpenses > 0 ? ((totalExpenses - prevExpenses) / prevExpenses * 100) : 0;
+  const incomeChange = prevIncome > 0 ? ((totalIncome - prevIncome) / prevIncome * 100) : 0;
+
+  // Daily average
+  const daysInPeriod = Math.max(differenceInDays(new Date() < periodEnd ? new Date() : periodEnd, periodStart), 1);
+  const dailyAvgExpense = totalExpenses / daysInPeriod;
+
+  // Top category
+  const expensesByCategory = periodTx.filter(t => t.type === "expense").reduce((acc: Record<string, number>, t) => {
+    acc[t.category] = (acc[t.category] || 0) + Number(t.amount);
+    return acc;
+  }, {});
+  const topCategory = Object.entries(expensesByCategory).sort((a, b) => b[1] - a[1])[0];
+
+  // Pie chart data
+  const pieData = Object.entries(expensesByCategory)
+    .map(([name, value]) => ({ name, value: value as number }))
+    .sort((a, b) => b.value - a.value);
 
   // Monthly trend (last 6 months)
   const now = new Date();
@@ -147,6 +190,22 @@ export default function Financas() {
     });
     return {
       month: format(m, "MMM", { locale: ptBR }),
+      gastos: txs.filter(t => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0),
+      receitas: txs.filter(t => t.type === "income").reduce((s, t) => s + Number(t.amount), 0),
+    };
+  });
+
+  // Weekly bar chart (last 4 weeks)
+  const weeklyData = Array.from({ length: 4 }, (_, i) => {
+    const weekStart = startOfWeek(subMonths(now, 0), { locale: ptBR });
+    const ws = new Date(weekStart.getTime() - (3 - i) * 7 * 86400000);
+    const we = new Date(ws.getTime() + 6 * 86400000 + 86399999);
+    const txs = transactions.filter(t => {
+      const d = new Date(t.transaction_date + "T12:00:00");
+      return d >= ws && d <= we;
+    });
+    return {
+      week: `Sem ${i + 1}`,
       gastos: txs.filter(t => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0),
       receitas: txs.filter(t => t.type === "income").reduce((s, t) => s + Number(t.amount), 0),
     };
@@ -203,52 +262,62 @@ export default function Financas() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Finanças</h1>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button><Plus className="mr-2 h-4 w-4" /> Adicionar</Button>
-          </DialogTrigger>
-          <DialogContent className="bg-card border-border">
-            <DialogHeader><DialogTitle>Nova transação</DialogTitle></DialogHeader>
-            <form onSubmit={handleAdd} className="space-y-4">
-              <div className="space-y-2">
-                <Label>Descrição</Label>
-                <Input value={form.description} onChange={e => setForm({...form, description: e.target.value})} required />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Wallet className="h-6 w-6 text-primary" /> Finanças
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Controle completo dos seus gastos e receitas</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => exportCSV(transactions, `financas-${format(new Date(), "yyyy-MM-dd")}.csv`)}>
+            <Download className="mr-1 h-4 w-4" /> Exportar
+          </Button>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button><Plus className="mr-2 h-4 w-4" /> Adicionar</Button>
+            </DialogTrigger>
+            <DialogContent className="bg-card border-border">
+              <DialogHeader><DialogTitle>Nova transação</DialogTitle></DialogHeader>
+              <form onSubmit={handleAdd} className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Valor (R$)</Label>
-                  <Input type="number" step="0.01" min="0" value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} required />
+                  <Label>Descrição</Label>
+                  <Input value={form.description} onChange={e => setForm({...form, description: e.target.value})} required />
                 </div>
-                <div className="space-y-2">
-                  <Label>Tipo</Label>
-                  <Select value={form.type} onValueChange={v => setForm({...form, type: v})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="expense">Gasto</SelectItem>
-                      <SelectItem value="income">Receita</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Valor (R$)</Label>
+                    <Input type="number" step="0.01" min="0" value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Tipo</Label>
+                    <Select value={form.type} onValueChange={v => setForm({...form, type: v})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="expense">Gasto</SelectItem>
+                        <SelectItem value="income">Receita</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Categoria</Label>
-                  <Select value={form.category} onValueChange={v => setForm({...form, category: v})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Categoria</Label>
+                    <Select value={form.category} onValueChange={v => setForm({...form, category: v})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Data</Label>
+                    <Input type="date" value={form.transaction_date} onChange={e => setForm({...form, transaction_date: e.target.value})} />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Data</Label>
-                  <Input type="date" value={form.transaction_date} onChange={e => setForm({...form, transaction_date: e.target.value})} />
-                </div>
-              </div>
-              <Button type="submit" className="w-full">Salvar</Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+                <Button type="submit" className="w-full">Salvar</Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Period filter */}
@@ -283,42 +352,94 @@ export default function Financas() {
 
         {/* VISÃO GERAL */}
         <TabsContent value="visao-geral" className="space-y-6">
-          {/* Summary cards */}
-          <div className="grid sm:grid-cols-3 gap-4">
+          {/* Summary cards - 4 columns */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="bg-card border-border">
-              <CardContent className="pt-5 flex items-center gap-3">
-                <TrendingDown className="h-8 w-8 text-destructive shrink-0" />
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase">Gastos</p>
-                  <p className="text-2xl font-bold text-destructive">R$ {totalExpenses.toFixed(2)}</p>
+              <CardContent className="pt-5">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Gastos</p>
+                  <TrendingDown className="h-5 w-5 text-destructive/50" />
                 </div>
+                <p className="text-2xl font-bold text-destructive">R$ {totalExpenses.toFixed(2)}</p>
+                {expenseChange !== 0 && (
+                  <div className={`flex items-center gap-1 mt-1 text-xs ${expenseChange > 0 ? "text-destructive" : "text-green-400"}`}>
+                    {expenseChange > 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                    {Math.abs(expenseChange).toFixed(0)}% vs período anterior
+                  </div>
+                )}
               </CardContent>
             </Card>
             <Card className="bg-card border-border">
-              <CardContent className="pt-5 flex items-center gap-3">
-                <TrendingUp className="h-8 w-8 text-green-400 shrink-0" />
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase">Receitas</p>
-                  <p className="text-2xl font-bold text-green-400">R$ {totalIncome.toFixed(2)}</p>
+              <CardContent className="pt-5">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Receitas</p>
+                  <TrendingUp className="h-5 w-5 text-green-400/50" />
                 </div>
+                <p className="text-2xl font-bold text-green-400">R$ {totalIncome.toFixed(2)}</p>
+                {incomeChange !== 0 && (
+                  <div className={`flex items-center gap-1 mt-1 text-xs ${incomeChange > 0 ? "text-green-400" : "text-destructive"}`}>
+                    {incomeChange > 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                    {Math.abs(incomeChange).toFixed(0)}% vs período anterior
+                  </div>
+                )}
               </CardContent>
             </Card>
             <Card className="bg-card border-border">
-              <CardContent className="pt-5 flex items-center gap-3">
-                <Wallet className={`h-8 w-8 shrink-0 ${balance >= 0 ? "text-green-400" : "text-destructive"}`} />
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase">Saldo</p>
-                  <p className={`text-2xl font-bold ${balance >= 0 ? "text-green-400" : "text-destructive"}`}>R$ {balance.toFixed(2)}</p>
+              <CardContent className="pt-5">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Saldo</p>
+                  <Wallet className={`h-5 w-5 ${balance >= 0 ? "text-green-400/50" : "text-destructive/50"}`} />
                 </div>
+                <p className={`text-2xl font-bold ${balance >= 0 ? "text-green-400" : "text-destructive"}`}>R$ {balance.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground mt-1">{txCount} transações no período</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-card border-border">
+              <CardContent className="pt-5">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Média/dia</p>
+                  <CalendarDays className="h-5 w-5 text-primary/50" />
+                </div>
+                <p className="text-2xl font-bold">R$ {dailyAvgExpense.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground mt-1">de gasto por dia</p>
               </CardContent>
             </Card>
           </div>
+
+          {/* Top categories ranking */}
+          {pieData.length > 0 && (
+            <Card className="bg-card border-border">
+              <CardHeader><CardTitle className="text-base flex items-center gap-2"><Target className="h-4 w-4 text-primary" /> Maiores gastos por categoria</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {pieData.slice(0, 5).map((cat, idx) => {
+                    const pct = totalExpenses > 0 ? (cat.value / totalExpenses) * 100 : 0;
+                    return (
+                      <div key={cat.name} className="space-y-1">
+                        <div className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }} />
+                            <span className="font-medium">{cat.name}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-muted-foreground">{pct.toFixed(0)}%</span>
+                            <span className="font-semibold w-28 text-right">R$ {cat.value.toFixed(2)}</span>
+                          </div>
+                        </div>
+                        <Progress value={pct} className="h-1.5" />
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Charts */}
           <div className="grid lg:grid-cols-2 gap-6">
             {/* Pie chart */}
             <Card className="bg-card border-border">
-              <CardHeader><CardTitle className="text-base">Gastos por categoria</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">Distribuição de gastos</CardTitle></CardHeader>
               <CardContent>
                 {pieData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={260}>
@@ -348,9 +469,9 @@ export default function Financas() {
               </CardContent>
             </Card>
 
-            {/* Line chart */}
+            {/* Line chart - 6 months */}
             <Card className="bg-card border-border">
-              <CardHeader><CardTitle className="text-base">Últimos 6 meses</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">Evolução mensal (6 meses)</CardTitle></CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={260}>
                   <LineChart data={monthlyData}>
@@ -369,6 +490,27 @@ export default function Financas() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Weekly bar chart */}
+          <Card className="bg-card border-border">
+            <CardHeader><CardTitle className="text-base">Comparativo semanal</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={weeklyData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(240 10% 18%)" />
+                  <XAxis dataKey="week" stroke="hsl(240 5% 65%)" fontSize={11} />
+                  <YAxis stroke="hsl(240 5% 65%)" fontSize={11} />
+                  <Tooltip
+                    formatter={(v: number) => `R$ ${v.toFixed(2)}`}
+                    contentStyle={{ backgroundColor: "hsl(240 12% 7%)", border: "1px solid hsl(240 10% 18%)", borderRadius: "8px", color: "#fff" }}
+                  />
+                  <Legend />
+                  <Bar dataKey="gastos" fill="hsl(0 84% 60%)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="receitas" fill="hsl(142 76% 36%)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* TRANSAÇÕES */}
@@ -418,7 +560,7 @@ export default function Financas() {
                     </div>
                     <div className="space-y-1">
                       {txArr.map((t: any) => (
-                        <div key={t.id} className="flex items-center gap-3 p-3 rounded-lg bg-card border border-border hover:bg-accent/5 transition-colors">
+                        <div key={t.id} className="flex items-center gap-3 p-3 rounded-lg bg-card border border-border hover:bg-accent/5 transition-colors group">
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${t.type === "expense" ? "bg-red-500/10" : "bg-green-500/10"}`}>
                             {t.type === "expense"
                               ? <TrendingDown className="h-4 w-4 text-destructive" />
@@ -426,11 +568,20 @@ export default function Financas() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{t.description}</p>
-                            <Badge variant="secondary" className="text-xs mt-0.5">{t.category}</Badge>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <Badge variant="secondary" className="text-xs">{t.category}</Badge>
+                              {t.source === "whatsapp" && <span className="text-[10px] text-green-500/70">via WhatsApp</span>}
+                            </div>
                           </div>
                           <p className={`text-sm font-semibold shrink-0 ${t.type === "expense" ? "text-destructive" : "text-green-400"}`}>
                             {t.type === "expense" ? "-" : "+"}R$ {Number(t.amount).toFixed(2)}
                           </p>
+                          <button
+                            onClick={() => handleDeleteTransaction(t.id)}
+                            className="text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -562,17 +713,22 @@ export default function Financas() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {categories.map((c, idx) => {
               const total = transactions.filter(t => t.category === c.name && t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
+              const pct = totalExpenses > 0 ? (total / totalExpenses) * 100 : 0;
               return (
                 <Card key={c.id} className="bg-card border-border">
-                  <CardContent className="pt-5 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }} />
-                      <div>
-                        <p className="font-medium text-sm">{c.name}</p>
-                        {c.is_default && <span className="text-xs text-muted-foreground">Padrão</span>}
+                  <CardContent className="pt-5">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }} />
+                        <div>
+                          <p className="font-medium text-sm">{c.name}</p>
+                          {c.is_default && <span className="text-xs text-muted-foreground">Padrão</span>}
+                        </div>
                       </div>
+                      <p className="text-sm font-semibold">R$ {total.toFixed(2)}</p>
                     </div>
-                    <p className="text-sm font-medium text-muted-foreground">R$ {total.toFixed(2)}</p>
+                    <Progress value={pct} className="h-1" />
+                    <p className="text-xs text-muted-foreground mt-1">{pct.toFixed(0)}% dos gastos</p>
                   </CardContent>
                 </Card>
               );
