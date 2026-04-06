@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
-  MessageCircle, Bot, Check, ArrowRight,
+  MessageCircle, Check, ArrowRight,
   Star, Shield, Sparkles, Mic, Camera, Lock, RefreshCw,
   ChevronDown, BarChart3, FileText, Table2, Zap, CalendarDays,
 } from "lucide-react";
+import logoEscrita from "@/assets/logo_escrita.png";
+import logoChats from "@/assets/logo_chats.png";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    TYPES
