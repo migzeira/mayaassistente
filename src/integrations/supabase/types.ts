@@ -27,6 +27,7 @@ export type Database = {
           module_chat: boolean
           module_finance: boolean
           module_notes: boolean
+          monthly_report: boolean
           system_prompt: string | null
           template_event: string | null
           template_expense: string | null
@@ -37,6 +38,7 @@ export type Database = {
           updated_at: string
           user_id: string
           user_nickname: string | null
+          weekly_report: boolean
         }
         Insert: {
           agent_name?: string
@@ -50,6 +52,7 @@ export type Database = {
           module_chat?: boolean
           module_finance?: boolean
           module_notes?: boolean
+          monthly_report?: boolean
           system_prompt?: string | null
           template_event?: string | null
           template_expense?: string | null
@@ -60,6 +63,7 @@ export type Database = {
           updated_at?: string
           user_id: string
           user_nickname?: string | null
+          weekly_report?: boolean
         }
         Update: {
           agent_name?: string
@@ -73,6 +77,7 @@ export type Database = {
           module_chat?: boolean
           module_finance?: boolean
           module_notes?: boolean
+          monthly_report?: boolean
           system_prompt?: string | null
           template_event?: string | null
           template_expense?: string | null
@@ -83,6 +88,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
           user_nickname?: string | null
+          weekly_report?: boolean
         }
         Relationships: [
           {
@@ -184,6 +190,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "conversations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      error_logs: {
+        Row: {
+          context: string
+          created_at: string
+          id: string
+          message: string
+          metadata: Json | null
+          phone_number: string | null
+          stack: string | null
+          user_id: string | null
+        }
+        Insert: {
+          context: string
+          created_at?: string
+          id?: string
+          message: string
+          metadata?: Json | null
+          phone_number?: string | null
+          stack?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          context?: string
+          created_at?: string
+          id?: string
+          message?: string
+          metadata?: Json | null
+          phone_number?: string | null
+          stack?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "error_logs_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -413,6 +460,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          account_status: string
           created_at: string
           display_name: string | null
           id: string
@@ -427,6 +475,7 @@ export type Database = {
           whatsapp_lid: string | null
         }
         Insert: {
+          account_status?: string
           created_at?: string
           display_name?: string | null
           id: string
@@ -441,6 +490,7 @@ export type Database = {
           whatsapp_lid?: string | null
         }
         Update: {
+          account_status?: string
           created_at?: string
           display_name?: string | null
           id?: string
@@ -488,15 +538,90 @@ export type Database = {
           },
         ]
       }
+      rate_limits: {
+        Row: {
+          blocked_until: string | null
+          count: number
+          phone_number: string
+          window_start: string
+        }
+        Insert: {
+          blocked_until?: string | null
+          count?: number
+          phone_number: string
+          window_start?: string
+        }
+        Update: {
+          blocked_until?: string | null
+          count?: number
+          phone_number?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
+      recurring_transactions: {
+        Row: {
+          active: boolean
+          amount: number
+          category: string
+          created_at: string
+          description: string
+          frequency: string
+          id: string
+          last_processed: string | null
+          next_date: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          amount: number
+          category?: string
+          created_at?: string
+          description: string
+          frequency: string
+          id?: string
+          last_processed?: string | null
+          next_date: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          amount?: number
+          category?: string
+          created_at?: string
+          description?: string
+          frequency?: string
+          id?: string
+          last_processed?: string | null
+          next_date?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_transactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reminders: {
         Row: {
           created_at: string
           event_id: string | null
           id: string
           message: string
+          recurrence: string
+          recurrence_value: number | null
           send_at: string
           sent_at: string | null
+          source: string
           status: string
+          title: string | null
           user_id: string
           whatsapp_number: string
         }
@@ -505,9 +630,13 @@ export type Database = {
           event_id?: string | null
           id?: string
           message: string
+          recurrence?: string
+          recurrence_value?: number | null
           send_at: string
           sent_at?: string | null
+          source?: string
           status?: string
+          title?: string | null
           user_id: string
           whatsapp_number: string
         }
@@ -516,9 +645,13 @@ export type Database = {
           event_id?: string | null
           id?: string
           message?: string
+          recurrence?: string
+          recurrence_value?: number | null
           send_at?: string
           sent_at?: string | null
+          source?: string
           status?: string
+          title?: string | null
           user_id?: string
           whatsapp_number?: string
         }
@@ -583,6 +716,41 @@ export type Database = {
           },
         ]
       }
+      user_phone_numbers: {
+        Row: {
+          created_at: string
+          id: string
+          is_primary: boolean
+          label: string | null
+          phone_number: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          label?: string | null
+          phone_number: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          label?: string | null
+          phone_number?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_phone_numbers_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_sessions: {
         Row: {
           created_at: string
@@ -629,7 +797,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      cleanup_old_error_logs: { Args: never; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
