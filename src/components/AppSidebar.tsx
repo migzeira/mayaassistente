@@ -25,7 +25,7 @@ const menuItems = [
   { title: "Lembretes", url: "/dashboard/lembretes", icon: Bell },
   { title: "Integrações", url: "/dashboard/integracoes", icon: Link2 },
   { title: "Config. do Agente", url: "/dashboard/agente", icon: Settings },
-  { title: "Meu Plano", url: "/dashboard/plano", icon: BarChart3 },
+  
   { title: "Meu Perfil", url: "/dashboard/perfil", icon: User },
 ];
 

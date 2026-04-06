@@ -50,7 +50,7 @@ const App = () => (
               <Route path="conversas" element={<Conversas />} />
               <Route path="integracoes" element={<Integracoes />} />
               <Route path="agente" element={<ConfigAgente />} />
-              <Route path="plano" element={<MeuPlano />} />
+              
               <Route path="perfil" element={<MeuPerfil />} />
             </Route>
             <Route path="/admin" element={<ProtectedRoute><AdminPanel /></ProtectedRoute>} />
