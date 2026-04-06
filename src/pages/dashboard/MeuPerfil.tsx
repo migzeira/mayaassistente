@@ -48,7 +48,7 @@ export default function MeuPerfil() {
   const loadData = async () => {
     const [profileRes, numbersRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", user!.id).single(),
-      supabase.from("user_phone_numbers").select("*").eq("user_id", user!.id).order("created_at"),
+      (supabase.from("user_phone_numbers" as any).select("*").eq("user_id", user!.id).order("created_at") as any),
     ]);
     setProfile(profileRes.data);
     setExtraNumbers(numbersRes.data ?? []);
