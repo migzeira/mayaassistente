@@ -715,7 +715,7 @@ export default function Index() {
             </Button>
             <Button size="sm" asChild
               className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white rounded-lg shadow-lg shadow-violet-500/25 hover:-translate-y-px transition-all duration-200">
-              <Link to="/signup">Assinar agora</Link>
+              <a href="#planos">Assinar agora</a>
             </Button>
           </div>
         </div>
