@@ -16,6 +16,7 @@ import Financas from "./pages/dashboard/Financas";
 import Agenda from "./pages/dashboard/Agenda";
 import Anotacoes from "./pages/dashboard/Anotacoes";
 import Conversas from "./pages/dashboard/Conversas";
+import Lembretes from "./pages/dashboard/Lembretes";
 import Integracoes from "./pages/dashboard/Integracoes";
 import ConfigAgente from "./pages/dashboard/ConfigAgente";
 
