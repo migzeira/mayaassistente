@@ -8,6 +8,9 @@ import {
 } from "lucide-react";
 import logoEscrita from "@/assets/logo_escrita.png";
 import logoChats from "@/assets/logo_chats.png";
+import googleAgendaImg from "@/assets/google_agenda.png";
+import googleSheetsImg from "@/assets/google_sheets.png";
+import notionImg from "@/assets/notion_logo.png";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    TYPES
@@ -581,7 +584,7 @@ function PricingSection() {
   const link = annual
     ? "https://pay.kirvano.com/59bde07b-9a4a-41a6-9009-48bb1e37c364"
     : "https://pay.kirvano.com/4a308234-3702-4233-9d2a-4dce73bf0d2b";
-  const subtext = annual ? "Equivale a R$23,92/mês — economia de 76%!" : "Menos de R$1 por dia";
+  const subtext = annual ? "Equivale a R$23,92/mês" : "Menos de R$1 por dia";
 
   return (
     <section id="planos" className="py-28 px-4">
@@ -612,7 +615,6 @@ function PricingSection() {
                 }`}
               >
                 Anual
-                <span className="ml-1.5 text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-full font-bold">-76%</span>
               </button>
             </div>
           </div>
@@ -1062,19 +1064,19 @@ export default function Index() {
           <div className="grid md:grid-cols-3 gap-5">
             {[
               {
-                icon: CalendarDays, color: "text-blue-400", bg: "from-blue-500/15 to-blue-500/5", border: "border-blue-500/25",
+                image: googleAgendaImg, color: "text-blue-400", bg: "from-blue-500/15 to-blue-500/5", border: "border-blue-500/25",
                 title: "Google Agenda",
                 desc: "Crie eventos mandando uma mensagem no WhatsApp. Aparecem na sua agenda Google em segundos, com lembrete automático.",
                 items: ["Sincronização em tempo real","Lembretes no Google","Acesse em qualquer device"],
               },
               {
-                icon: Table2, color: "text-emerald-400", bg: "from-emerald-500/15 to-emerald-500/5", border: "border-emerald-500/25",
+                image: googleSheetsImg, color: "text-emerald-400", bg: "from-emerald-500/15 to-emerald-500/5", border: "border-emerald-500/25",
                 title: "Google Sheets",
                 desc: "Cada transação registrada no WhatsApp vai direto pra sua planilha. Seus dados sempre atualizados, prontos pra você usar.",
                 items: ["Exportação automática","Planilha sempre atualizada","Use suas próprias fórmulas"],
               },
               {
-                icon: FileText, color: "text-gray-300", bg: "from-gray-500/15 to-gray-500/5", border: "border-gray-500/25",
+                image: notionImg, color: "text-gray-300", bg: "from-gray-500/15 to-gray-500/5", border: "border-gray-500/25",
                 title: "Notion",
                 desc: "Salve ideias, anotações e tarefas no WhatsApp. Elas aparecem organizadas no seu workspace do Notion sem você tocar em nada.",
                 items: ["Notas sincronizadas","Organização automática","Integra com databases"],
@@ -1082,8 +1084,8 @@ export default function Index() {
             ].map((int, i) => (
               <AnimateIn key={int.title} delay={i * 90}>
                 <div className={`rounded-2xl border ${int.border} bg-gradient-to-b ${int.bg} p-6 h-full hover:scale-[1.02] transition-all duration-300`}>
-                  <div className={`w-12 h-12 rounded-xl bg-[#0b0b12] border ${int.border} flex items-center justify-center mb-4`}>
-                    <int.icon className={`w-6 h-6 ${int.color}`} />
+                  <div className={`w-12 h-12 rounded-xl bg-[#0b0b12] border ${int.border} flex items-center justify-center mb-4 overflow-hidden`}>
+                    <img src={int.image} alt={int.title} className="w-7 h-7 object-contain" />
                   </div>
                   <h3 className="font-bold text-white text-[16px] mb-2">{int.title}</h3>
                   <p className="text-[13px] text-gray-500 leading-relaxed mb-4">{int.desc}</p>
@@ -1103,7 +1105,7 @@ export default function Index() {
             <div className="mt-8 text-center">
               <Button asChild
                 className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white rounded-xl shadow-lg shadow-violet-500/25 hover:-translate-y-px transition-all duration-200 h-11 px-7 font-semibold">
-                <Link to="/signup">Assinar agora <ArrowRight className="w-4 h-4 ml-2" /></Link>
+                <a href="#planos">Assinar agora <ArrowRight className="w-4 h-4 ml-2" /></a>
               </Button>
             </div>
           </AnimateIn>
