@@ -811,7 +811,7 @@ export default function Index() {
                 </p>
                 <Button size="lg" asChild
                   className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white h-11 px-7 rounded-xl shadow-lg shadow-violet-500/25 hover:-translate-y-px transition-all duration-200 font-semibold">
-                  <Link to="/signup">Quero começar <ArrowRight className="w-4 h-4 ml-2" /></Link>
+                  <a href="#planos">Quero começar <ArrowRight className="w-4 h-4 ml-2" /></a>
                 </Button>
               </div>
             </AnimateIn>
