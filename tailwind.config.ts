@@ -155,6 +155,7 @@ export default {
         "fade-up": "fade-up 0.5s ease-out both",
         "dot-bounce": "dot-bounce 1.2s ease-in-out infinite",
         shimmer: "shimmer 2.5s linear infinite",
+        "shimmer-slow": "shimmer 4s ease-in-out infinite",
         "gradient-x": "gradient-x 4s ease infinite",
         "spin-slow": "spin-slow 20s linear infinite",
         marquee: "marquee 28s linear infinite",
