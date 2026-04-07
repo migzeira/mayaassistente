@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Save, Clock, CheckCircle, XCircle, Info, Plus, Trash2, Smartphone } from "lucide-react";
+import { Save, Clock, CheckCircle, XCircle, Info, Smartphone } from "lucide-react";
 
 const timezones = [
   "America/Sao_Paulo", "America/Fortaleza", "America/Manaus", "America/Cuiaba",
@@ -39,50 +39,17 @@ export default function MeuPerfil() {
   const { user } = useAuth();
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [extraNumbers, setExtraNumbers] = useState<any[]>([]);
-  const [newNumber, setNewNumber] = useState("");
-  const [newLabel, setNewLabel] = useState("");
 
   useEffect(() => { if (user) loadData(); }, [user]);
 
   const loadData = async () => {
-    const [profileRes, numbersRes] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", user!.id).single(),
-      (supabase.from("user_phone_numbers" as any).select("*").eq("user_id", user!.id).order("created_at") as any),
-    ]);
-    setProfile(profileRes.data);
-    setExtraNumbers(numbersRes.data ?? []);
+    const { data } = await supabase.from("profiles").select("*").eq("id", user!.id).single();
+    setProfile(data);
     setLoading(false);
-  };
-
-  const maxExtra = 2; // Até 3 números totais (1 principal + 2 adicionais)
-
-  const addExtraNumber = async () => {
-    if (!newNumber.trim()) return;
-    const clean = newNumber.replace(/\D/g, "");
-    const { error } = await (supabase.from("user_phone_numbers" as any).insert({
-      user_id: user!.id,
-      phone_number: clean,
-      label: newLabel || null,
-    }) as any);
-    if (error) toast.error(error.message.includes("Limite") ? error.message : "Erro ao adicionar número");
-    else {
-      toast.success("Número adicionado!");
-      setNewNumber("");
-      setNewLabel("");
-      loadData();
-    }
-  };
-
-  const removeExtraNumber = async (id: string) => {
-    await (supabase.from("user_phone_numbers" as any).delete().eq("id", id) as any);
-    toast.success("Número removido.");
-    loadData();
   };
 
   const handleSave = async () => {
     const cleanPhone = profile.phone_number?.replace(/\D/g, "") || null;
-    // Se tem número e conta ainda está pendente → ativa automaticamente
     const shouldActivate = !!cleanPhone && profile.account_status === "pending";
     const { error } = await supabase.from("profiles").update({
       display_name: profile.display_name,
@@ -112,106 +79,76 @@ export default function MeuPerfil() {
         <StatusBadge status={profile.account_status} />
       </div>
 
-      {profile.account_status === "pending" && (
-        <div className="flex items-start gap-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-sm text-yellow-200">
-          <Info className="h-4 w-4 shrink-0 mt-0.5" />
-          <p>Preencha seu número de WhatsApp abaixo e salve — a Maya será ativada automaticamente para responder no seu número.</p>
-        </div>
-      )}
-
-      {profile.account_status === "active" && profile.phone_number && (
-        <div className="flex items-start gap-2 p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-sm text-green-200">
-          <CheckCircle className="h-4 w-4 shrink-0 mt-0.5" />
-          <p>Maya ativa! Envie uma mensagem para o WhatsApp da Maya e ela te responderá.</p>
-        </div>
-      )}
-
-      {profile.account_status === "active" && !profile.phone_number && (
-        <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-sm text-amber-200">
-          <Info className="h-4 w-4 shrink-0 mt-0.5" />
-          <p>Adicione seu número de WhatsApp abaixo para que a Maya possa te responder.</p>
-        </div>
-      )}
-
+      {/* ── Dados pessoais ── */}
       <Card className="bg-card border-border">
-        <CardContent className="pt-6 space-y-4">
+        <CardHeader>
+          <CardTitle className="text-base">Dados pessoais</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label>Nome de exibição</Label>
-            <Input value={profile.display_name || ""} onChange={e => setProfile({...profile, display_name: e.target.value})} placeholder="Como quer ser chamado" />
+            <Input
+              value={profile.display_name || ""}
+              onChange={e => setProfile({ ...profile, display_name: e.target.value })}
+              placeholder="Como quer ser chamado"
+            />
           </div>
           <div className="space-y-2">
             <Label>Email</Label>
             <Input value={user?.email ?? ""} disabled className="opacity-60" />
           </div>
           <div className="space-y-2">
-            <Label>Telefone / WhatsApp</Label>
-            <Input
-              value={profile.phone_number || ""}
-              onChange={e => setProfile({...profile, phone_number: e.target.value})}
-              placeholder="5511999999999 (só números com DDI)"
-            />
-            <p className="text-xs text-muted-foreground">Formato: DDI + DDD + número. Ex: 5511999999999</p>
-          </div>
-          <div className="space-y-2">
             <Label>Fuso horário</Label>
-            <Select value={profile.timezone} onValueChange={v => setProfile({...profile, timezone: v})}>
+            <Select value={profile.timezone} onValueChange={v => setProfile({ ...profile, timezone: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{timezones.map(tz => <SelectItem key={tz} value={tz}>{tz.replace("America/", "")}</SelectItem>)}</SelectContent>
+              <SelectContent>
+                {timezones.map(tz => <SelectItem key={tz} value={tz}>{tz.replace("America/", "")}</SelectItem>)}
+              </SelectContent>
             </Select>
           </div>
-          <Button onClick={handleSave}><Save className="mr-2 h-4 w-4" /> Salvar perfil</Button>
         </CardContent>
       </Card>
 
-      {/* Números adicionais */}
-      <Card className="bg-card border-border">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Smartphone className="h-4 w-4" />
-              Números adicionais
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              Adicione até 2 números extras. Todos os números vinculados ativam o assistente.
-            </p>
+      {/* ── WhatsApp — destaque especial ── */}
+      <Card className={`border-2 ${profile.phone_number ? "border-green-500/40 bg-green-500/5" : "border-primary/40 bg-primary/5"}`}>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Smartphone className={`h-5 w-5 ${profile.phone_number ? "text-green-400" : "text-primary"}`} />
+            Número do WhatsApp
+            {profile.phone_number
+              ? <Badge className="bg-green-500/20 text-green-300 border-green-500/30 text-xs">Vinculado</Badge>
+              : <Badge className="bg-primary/20 text-primary border-primary/30 text-xs">Obrigatório</Badge>
+            }
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!profile.phone_number && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20 text-sm text-primary">
+              <Info className="h-4 w-4 shrink-0 mt-0.5" />
+              <p>Preencha seu número abaixo e salve — a Maya será ativada automaticamente para responder no seu WhatsApp.</p>
+            </div>
+          )}
+          {profile.phone_number && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-sm text-green-200">
+              <CheckCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <p>Maya ativa! Envie uma mensagem para o WhatsApp da Maya e ela te responderá.</p>
+            </div>
+          )}
+          <Input
+            value={profile.phone_number || ""}
+            onChange={e => setProfile({ ...profile, phone_number: e.target.value })}
+            placeholder="5511999999999"
+            className="font-mono text-base"
+          />
+          <p className="text-xs text-muted-foreground">
+            Formato: DDI + DDD + número, somente dígitos. Exemplo: <span className="font-mono">5511999999999</span>
+          </p>
+        </CardContent>
+      </Card>
 
-            {extraNumbers.map(n => (
-              <div key={n.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border">
-                <Smartphone className="h-4 w-4 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-mono">{n.phone_number}</p>
-                  {n.label && <p className="text-xs text-muted-foreground">{n.label}</p>}
-                </div>
-                <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => removeExtraNumber(n.id)}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-
-            {extraNumbers.length < maxExtra && (
-              <div className="flex gap-2">
-                <Input
-                  value={newNumber}
-                  onChange={e => setNewNumber(e.target.value)}
-                  placeholder="5511999999999"
-                  className="flex-1 font-mono"
-                />
-                <Input
-                  value={newLabel}
-                  onChange={e => setNewLabel(e.target.value)}
-                  placeholder="Rótulo (ex: Trabalho)"
-                  className="w-40"
-                />
-                <Button size="sm" onClick={addExtraNumber}><Plus className="h-4 w-4" /></Button>
-              </div>
-            )}
-
-            {extraNumbers.length >= maxExtra && (
-              <p className="text-xs text-muted-foreground italic">Limite de 2 números adicionais atingido.</p>
-            )}
-          </CardContent>
-        </Card>
+      <Button onClick={handleSave} className="w-full">
+        <Save className="mr-2 h-4 w-4" /> Salvar
+      </Button>
     </div>
   );
 }

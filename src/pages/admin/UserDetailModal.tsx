@@ -6,10 +6,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { format, differenceInDays } from "date-fns";
+import { format, differenceInDays, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface Props {
   userId: string;
@@ -30,7 +31,7 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
   const [events, setEvents] = useState<any[]>([]);
   const [reminders, setReminders] = useState<any[]>([]);
   const [notes, setNotes] = useState<any[]>([]);
-  const [changingPlan, setChangingPlan] = useState(false);
+  const [activatingDays, setActivatingDays] = useState("");
 
   useEffect(() => {
     if (open && userId) loadAll();
@@ -75,19 +76,40 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
     try { return format(new Date(d), "dd/MM/yy", { locale: ptBR }); } catch { return "—"; }
   };
 
-  const handleChangePlan = async (plan: string) => {
-    setChangingPlan(true);
-    const { error } = await (supabase.from("profiles").update({ plan } as any).eq("id", userId) as any);
-    if (error) toast.error("Erro ao alterar plano");
-    else { toast.success(`Plano alterado para ${plan}`); setProfile((p: any) => ({ ...p, plan })); onProfileUpdate?.(); }
-    setChangingPlan(false);
+  const handleActivateWithPeriod = async () => {
+    const days = parseInt(activatingDays);
+    if (!days || days < 1) { toast.error("Informe um número de dias válido"); return; }
+    const accessUntil = addDays(new Date(), days).toISOString();
+    const { error } = await (supabase.from("profiles").update({
+      account_status: "active",
+      access_until: accessUntil,
+    } as any).eq("id", userId) as any);
+    // Garante agente ativo
+    await supabase.from("agent_configs").update({ is_active: true } as any).eq("user_id", userId);
+    if (error) toast.error("Erro ao ativar");
+    else {
+      toast.success(`Conta ativada por ${days} dia${days > 1 ? "s" : ""}!`);
+      setProfile((p: any) => ({ ...p, account_status: "active", access_until: accessUntil }));
+      setActivatingDays("");
+      onProfileUpdate?.();
+    }
   };
 
-  const handleToggleStatus = async () => {
-    const newStatus = profile?.account_status === "suspended" ? "active" : "suspended";
-    const { error } = await (supabase.from("profiles").update({ account_status: newStatus } as any).eq("id", userId) as any);
-    if (error) toast.error("Erro ao alterar status");
-    else { toast.success(newStatus === "suspended" ? "Conta suspensa" : "Conta reativada"); setProfile((p: any) => ({ ...p, account_status: newStatus })); onProfileUpdate?.(); }
+  const handleActivatePermanent = async () => {
+    const { error } = await (supabase.from("profiles").update({
+      account_status: "active",
+      access_until: null,
+    } as any).eq("id", userId) as any);
+    await supabase.from("agent_configs").update({ is_active: true } as any).eq("user_id", userId);
+    if (error) toast.error("Erro ao ativar");
+    else { toast.success("Conta ativada!"); setProfile((p: any) => ({ ...p, account_status: "active", access_until: null })); onProfileUpdate?.(); }
+  };
+
+  const handleSuspend = async () => {
+    const { error } = await (supabase.from("profiles").update({ account_status: "suspended", access_until: null } as any).eq("id", userId) as any);
+    await supabase.from("agent_configs").update({ is_active: false } as any).eq("user_id", userId);
+    if (error) toast.error("Erro ao suspender");
+    else { toast.success("Conta suspensa"); setProfile((p: any) => ({ ...p, account_status: "suspended", access_until: null })); onProfileUpdate?.(); }
   };
 
   const daysSince = profile?.created_at ? differenceInDays(new Date(), new Date(profile.created_at)) : 0;
@@ -136,27 +158,73 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
                 <p className="text-xs text-muted-foreground">Dias cadastrado</p>
               </div>
               <div className="bg-muted/50 rounded-lg p-3 text-center">
-                <p className="text-lg font-bold">{profile?.messages_used || 0}/{profile?.messages_limit || 0}</p>
-                <p className="text-xs text-muted-foreground">Msgs usadas</p>
+                <p className="text-lg font-bold">{profile?.plan || "—"}</p>
+                <p className="text-xs text-muted-foreground">Plano</p>
               </div>
             </div>
 
             {/* Admin actions */}
-            <div className="flex flex-wrap gap-3 mb-4 p-3 rounded-lg border border-border bg-muted/30">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">Plano:</span>
-                <Select value={profile?.plan || "starter"} onValueChange={handleChangePlan} disabled={changingPlan}>
-                  <SelectTrigger className="w-32 h-8"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="starter">Starter</SelectItem>
-                    <SelectItem value="pro">Pro</SelectItem>
-                    <SelectItem value="business">Business</SelectItem>
-                  </SelectContent>
-                </Select>
+            <div className="mb-4 p-3 rounded-lg border border-border bg-muted/30 space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ações administrativas</p>
+
+              {/* Ativar por período */}
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Ativar por N dias</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      min="1"
+                      value={activatingDays}
+                      onChange={e => setActivatingDays(e.target.value)}
+                      placeholder="Ex: 7"
+                      className="w-24 h-8 text-sm"
+                    />
+                    <Button size="sm" className="h-8" onClick={handleActivateWithPeriod}>
+                      Ativar período
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex gap-1 flex-wrap">
+                  {[3, 7, 14, 30].map(d => (
+                    <Button key={d} size="sm" variant="outline" className="h-8 text-xs"
+                      onClick={() => { setActivatingDays(String(d)); }}>
+                      {d}d
+                    </Button>
+                  ))}
+                </div>
               </div>
-              <Button size="sm" variant={profile?.account_status === "suspended" ? "default" : "destructive"} onClick={handleToggleStatus}>
-                {profile?.account_status === "suspended" ? "Reativar conta" : "Suspender conta"}
-              </Button>
+
+              {/* Status atual + ações rápidas */}
+              <div className="flex flex-wrap gap-2 items-center pt-1 border-t border-border">
+                <span className="text-xs text-muted-foreground">Status atual:</span>
+                <Badge className={
+                  profile?.account_status === "active"
+                    ? "bg-green-500/20 text-green-300 border-green-500/30 text-xs"
+                    : profile?.account_status === "suspended"
+                    ? "bg-red-500/20 text-red-300 border-red-500/30 text-xs"
+                    : "bg-yellow-500/20 text-yellow-300 border-yellow-500/30 text-xs"
+                }>
+                  {profile?.account_status === "active" ? "Ativa" : profile?.account_status === "suspended" ? "Suspensa" : "Pendente"}
+                </Badge>
+                {profile?.access_until && (
+                  <span className="text-xs text-muted-foreground">
+                    Expira: {format(new Date(profile.access_until), "dd/MM/yyyy", { locale: ptBR })}
+                  </span>
+                )}
+                <div className="flex gap-2 ml-auto">
+                  {profile?.account_status !== "active" && (
+                    <Button size="sm" variant="default" className="h-8 text-xs" onClick={handleActivatePermanent}>
+                      Ativar permanente
+                    </Button>
+                  )}
+                  {profile?.account_status !== "suspended" && (
+                    <Button size="sm" variant="destructive" className="h-8 text-xs" onClick={handleSuspend}>
+                      Suspender
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
 
             <Tabs defaultValue="conversations">
