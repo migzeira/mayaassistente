@@ -138,7 +138,7 @@ serve(async (_req) => {
         const next = nextOccurrence(sendAt, reminder.recurrence, reminder.recurrence_value ?? null);
 
         if (next) {
-          await supabase.from("reminders").insert({
+          const { error: nextErr } = await supabase.from("reminders").insert({
             user_id: reminder.user_id,
             whatsapp_number: reminder.whatsapp_number,
             title: reminder.title,
@@ -149,7 +149,11 @@ serve(async (_req) => {
             source: reminder.source ?? "whatsapp",
             status: "pending",
           });
-          scheduled++;
+          if (nextErr) {
+            console.error(`[send-reminder] Failed to schedule next occurrence for ${reminder.id}:`, nextErr.message);
+          } else {
+            scheduled++;
+          }
         }
       }
     } catch (err) {

@@ -434,7 +434,10 @@ export async function parseReminderIntent(
   const langLabel = lang === "en" ? "English" : lang === "es" ? "Spanish" : "Portuguese Brazilian";
   const system = `You are a reminder intent parser. Respond ONLY with valid JSON, no markdown, no explanations. Write the "message" and "title" fields in ${langLabel}.`;
 
-  const prompt = `Hora atual: ${nowIso} (America/Sao_Paulo, UTC-3).
+  // Extract offset from nowIso (e.g. "2026-04-07T15:30:00-03:00" → "-03:00")
+  const offsetMatch = nowIso.match(/([+-]\d{2}:\d{2})$/);
+  const tzHint = offsetMatch ? `UTC${offsetMatch[1]}` : "UTC-03:00";
+  const prompt = `Hora atual: ${nowIso} (${tzHint}).
 
 Analise o pedido de lembrete e retorne JSON com EXATAMENTE esta estrutura:
 {
@@ -495,16 +498,17 @@ Pedido: "${message}"`;
       const diffHours = diffMs / (1000 * 60 * 60);
 
       // Se a IA agendou para mais de 20h à frente, verifica se o mesmo horário ainda existe hoje
+      // A janela é > 20h e < 28h para cobrir qualquer fuso UTC-12 a UTC+12
       if (diffHours > 20 && diffHours < 28) {
         const todayVersion = new Date(remindAt);
         todayVersion.setDate(todayVersion.getDate() - 1);
         // Se a versão de hoje ainda não passou (tem pelo menos 1 min de margem), usa ela
         if (todayVersion.getTime() > now.getTime() + 60000) {
-          parsed.remind_at = todayVersion.toISOString().replace("Z", "-03:00").replace(/\.\d{3}/, "");
-          // Reconstrói com offset correto
+          // Usa o mesmo offset que o nowIso tem
+          const tzOffset = offsetMatch ? offsetMatch[1] : "-03:00";
           const y = todayVersion.toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 10);
           const t = todayVersion.toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(11, 19);
-          parsed.remind_at = `${y}T${t}-03:00`;
+          parsed.remind_at = `${y}T${t}${tzOffset}`;
         }
       }
     }
