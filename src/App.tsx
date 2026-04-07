@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { lazy, Suspense } from "react";
+import logoIcon from "@/assets/logo_icon.png";
 
 // Landing page carrega imediato (SEO + first paint)
 import Index from "./pages/Index";
@@ -31,11 +32,16 @@ const ConfigAgente = lazy(() => import("./pages/dashboard/ConfigAgente"));
 const MeuPerfil = lazy(() => import("./pages/dashboard/MeuPerfil"));
 const AdminPanel = lazy(() => import("./pages/admin/AdminPanel"));
 
-// Loading spinner minimalista
+// Loading com logo da Maya girando
 function PageLoader() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+      <img
+        src={logoIcon}
+        alt="Carregando..."
+        className="w-12 h-12 animate-spin"
+        style={{ animationDuration: "1.2s" }}
+      />
     </div>
   );
 }
