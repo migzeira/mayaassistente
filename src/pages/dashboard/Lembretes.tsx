@@ -48,6 +48,29 @@ function formatBrasilia(isoString: string): string {
   });
 }
 
+// Retorna o grupo de data para um lembrete pendente (em BRT)
+function getDateGroup(sendAt: string): string {
+  const now = new Date();
+  if (new Date(sendAt) < now) return "Atrasado";
+  const todayBRT = now.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+  const tomorrowBRT = new Date(now.getTime() + 86400000).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+  const weekEndBRT = new Date(now.getTime() + 7 * 86400000).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+  const sendBRT = new Date(sendAt).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+  if (sendBRT === todayBRT) return "Hoje";
+  if (sendBRT === tomorrowBRT) return "Amanhã";
+  if (sendBRT <= weekEndBRT) return "Esta semana";
+  return "Depois";
+}
+
+const GROUP_ICONS: Record<string, string> = {
+  "Atrasado": "⚠️",
+  "Hoje": "📍",
+  "Amanhã": "⏰",
+  "Esta semana": "📅",
+  "Depois": "🗓",
+};
+const GROUP_ORDER = ["Atrasado", "Hoje", "Amanhã", "Esta semana", "Depois"];
+
 function recurrenceLabel(r: Reminder) {
   if (r.recurrence === "none" || !r.recurrence) return null;
   if (r.recurrence === "weekly" && r.recurrence_value != null) {
@@ -410,78 +433,107 @@ export default function Lembretes() {
             </div>
           )}
 
-          {filtered.map(r => {
-            const rec = recurrenceLabel(r);
-            const isRecurringPending = rec && r.status === "pending";
-            return (
-              <Card key={r.id} className="bg-card border-border hover:border-primary/20 transition-colors">
-                <CardContent className="py-4 flex items-start gap-4">
-                  <div className={`mt-0.5 w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center ${
-                    r.status === "sent" ? "bg-green-500/10" :
-                    r.status === "failed" ? "bg-red-500/10" : "bg-primary/10"
-                  }`}>
-                    {r.status === "sent" ? <CheckCircle2 className="h-4 w-4 text-green-500" /> :
-                     r.status === "failed" ? <XCircle className="h-4 w-4 text-red-500" /> :
-                     rec ? <RefreshCw className="h-4 w-4 text-primary" /> :
-                     <Bell className="h-4 w-4 text-primary" />}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                      <p className="font-medium text-sm">{r.title || r.message.slice(0, 60)}</p>
-                      {statusBadge(r.status, r.send_at)}
-                      {rec && (
-                        <Badge variant="outline" className="text-[10px] gap-1">
-                          <RefreshCw className="w-2.5 h-2.5" />{rec}
-                        </Badge>
-                      )}
+          {(() => {
+            const renderCard = (r: Reminder) => {
+              const rec = recurrenceLabel(r);
+              const isRecurringPending = rec && r.status === "pending";
+              return (
+                <Card key={r.id} className="bg-card border-border hover:border-primary/20 transition-colors">
+                  <CardContent className="py-4 flex items-start gap-4">
+                    <div className={`mt-0.5 w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center ${
+                      r.status === "sent" ? "bg-green-500/10" :
+                      r.status === "failed" ? "bg-red-500/10" : "bg-primary/10"
+                    }`}>
+                      {r.status === "sent" ? <CheckCircle2 className="h-4 w-4 text-green-500" /> :
+                       r.status === "failed" ? <XCircle className="h-4 w-4 text-red-500" /> :
+                       rec ? <RefreshCw className="h-4 w-4 text-primary" /> :
+                       <Bell className="h-4 w-4 text-primary" />}
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">{r.message}</p>
-                    <p className="text-xs text-muted-foreground/60 mt-1">
-                      {isRecurringPending
-                        ? <span className="text-violet-400/80 mr-1">próximo disparo:</span>
-                        : <span className="mr-1"></span>
-                      }
-                      {formatBrasilia(r.send_at)}
-                      {r.source === "whatsapp" && <span className="ml-2 text-green-500/70">• via WhatsApp</span>}
-                      {r.source === "manual" && <span className="ml-2 text-blue-500/70">• manual</span>}
-                    </p>
-                  </div>
 
-                  <div className="flex items-center gap-1.5 mt-1 flex-shrink-0">
-                    {/* Retry button — only for failed reminders */}
-                    {r.status === "failed" && (
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                        <p className="font-medium text-sm">{r.title || r.message.slice(0, 60)}</p>
+                        {statusBadge(r.status, r.send_at)}
+                        {rec && (
+                          <Badge variant="outline" className="text-[10px] gap-1">
+                            <RefreshCw className="w-2.5 h-2.5" />{rec}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">{r.message}</p>
+                      <p className="text-xs text-muted-foreground/60 mt-1">
+                        {isRecurringPending
+                          ? <span className="text-violet-400/80 mr-1">próximo disparo:</span>
+                          : <span className="mr-1"></span>
+                        }
+                        {formatBrasilia(r.send_at)}
+                        {r.source === "whatsapp" && <span className="ml-2 text-green-500/70">• via WhatsApp</span>}
+                        {r.source === "manual" && <span className="ml-2 text-blue-500/70">• manual</span>}
+                        {r.source === "event_followup" && <span className="ml-2 text-amber-500/70">• pós-evento</span>}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 mt-1 flex-shrink-0">
+                      {r.status === "failed" && (
+                        <button
+                          onClick={() => handleRetry(r.id)}
+                          title="Reagendar para daqui 2 minutos"
+                          className="text-muted-foreground hover:text-amber-400 transition-colors"
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </button>
+                      )}
                       <button
-                        onClick={() => handleRetry(r.id)}
-                        title="Reagendar para daqui 2 minutos"
-                        className="text-muted-foreground hover:text-amber-400 transition-colors"
+                        onClick={() => openEdit(r)}
+                        title="Editar lembrete"
+                        className="text-muted-foreground hover:text-primary transition-colors"
                       >
-                        <RefreshCw className="h-4 w-4" />
+                        <Pencil className="h-4 w-4" />
                       </button>
-                    )}
+                      <button
+                        onClick={() => handleDelete(r.id)}
+                        title="Excluir lembrete"
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            };
 
-                    {/* Edit button */}
-                    <button
-                      onClick={() => openEdit(r)}
-                      title="Editar lembrete"
-                      className="text-muted-foreground hover:text-primary transition-colors"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
+            // Agrupamento por data — só para o filtro "pending"
+            if (filter === "pending") {
+              const groups: Record<string, Reminder[]> = {};
+              for (const r of filtered) {
+                const g = getDateGroup(r.send_at);
+                if (!groups[g]) groups[g] = [];
+                groups[g].push(r);
+              }
+              return (
+                <div className="space-y-6">
+                  {GROUP_ORDER.filter(g => groups[g]?.length > 0).map(groupName => (
+                    <div key={groupName} className="space-y-2">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          {GROUP_ICONS[groupName]} {groupName}
+                        </span>
+                        <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
+                          {groups[groupName].length}
+                        </Badge>
+                        <div className="flex-1 h-px bg-border/50" />
+                      </div>
+                      {groups[groupName].map(r => renderCard(r))}
+                    </div>
+                  ))}
+                </div>
+              );
+            }
 
-                    {/* Delete button */}
-                    <button
-                      onClick={() => handleDelete(r.id)}
-                      title="Excluir lembrete"
-                      className="text-muted-foreground hover:text-destructive transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+            // Flat list para outros filtros
+            return <>{filtered.map(r => renderCard(r))}</>;
+          })()}
         </div>
       )}
     </div>

@@ -97,6 +97,34 @@ serve(async (_req) => {
 
       sent++;
 
+      // ─── Followup pós-evento: define pending_action na sessão do usuário ───
+      if (reminder.source === "event_followup" && reminder.user_id && reminder.whatsapp_number) {
+        let eventType = "compromisso";
+        if (reminder.event_id) {
+          const { data: ev } = await supabase
+            .from("events")
+            .select("event_type, event_date, event_time")
+            .eq("id", reminder.event_id)
+            .maybeSingle();
+          if (ev) eventType = ev.event_type ?? "compromisso";
+        }
+        // Seta pending_action na sessão do WhatsApp para capturar resposta do usuário
+        await supabase.from("whatsapp_sessions").upsert(
+          {
+            user_id: reminder.user_id,
+            phone_number: reminder.whatsapp_number,
+            pending_action: "event_followup",
+            pending_context: {
+              event_id: reminder.event_id ?? null,
+              event_title: reminder.title ?? "",
+              event_type: eventType,
+            },
+            last_activity: now.toISOString(),
+          },
+          { onConflict: "phone_number" }
+        );
+      }
+
       // ── Recorrência: agenda próxima ocorrência ──────────────────
       if (reminder.recurrence && reminder.recurrence !== "none") {
         const sendAt = new Date(reminder.send_at);

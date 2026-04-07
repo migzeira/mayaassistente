@@ -95,6 +95,7 @@ type Intent =
   | "notes_save"
   | "reminder_set"
   | "reminder_snooze"
+  | "event_followup"
   | "ai_chat";
 
 function classifyIntent(msg: string): Intent {
@@ -527,6 +528,53 @@ async function checkTimeConflict(
   return null;
 }
 
+// Detecta se o usuário quer um evento recorrente ("todo dia", "toda segunda", etc.)
+function detectEventRecurrence(msg: string): { type: string; weekday?: number } | null {
+  const m = msg.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (/todo(s)?\s*(os)?\s*dia(s)?|diariamente|todo\s+dia/.test(m)) return { type: "daily" };
+  const weekdayMap: Record<string, number> = {
+    domingo: 0, segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6,
+  };
+  for (const [day, num] of Object.entries(weekdayMap)) {
+    if (new RegExp(`toda(s)?\\s*(as)?\\s*${day}`).test(m)) return { type: "weekly", weekday: num };
+  }
+  if (/toda\s+semana|semanalmente/.test(m)) return { type: "weekly" };
+  if (/todo\s+mes|mensalmente/.test(m)) return { type: "monthly" };
+  return null;
+}
+
+// Gera as datas de ocorrência futuras para um evento recorrente
+function generateRecurrenceDates(startDate: string, type: string, weekday?: number, count = 1): string[] {
+  const dates: string[] = [];
+  const start = new Date(startDate + "T12:00:00");
+
+  if (type === "daily") {
+    for (let i = 1; i <= 29; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      dates.push(d.toISOString().split("T")[0]);
+    }
+  } else if (type === "weekly") {
+    const targetDay = weekday ?? start.getDay();
+    let d = new Date(start);
+    d.setDate(start.getDate() + 7);
+    for (let i = 0; i < 7; i++) {
+      // Ensure correct weekday
+      while (d.getDay() !== targetDay) d.setDate(d.getDate() + 1);
+      dates.push(d.toISOString().split("T")[0]);
+      d = new Date(d);
+      d.setDate(d.getDate() + 7);
+    }
+  } else if (type === "monthly") {
+    for (let i = 1; i <= 3; i++) {
+      const d = new Date(start);
+      d.setMonth(start.getMonth() + i);
+      dates.push(d.toISOString().split("T")[0]);
+    }
+  }
+  return dates;
+}
+
 async function handleAgendaCreate(
   userId: string,
   phone: string,
@@ -544,20 +592,21 @@ async function handleAgendaCreate(
   // Usuário está respondendo à oferta de lembrete
   if (step === "waiting_reminder_answer") {
     // "só me avisa na hora" → lembrete no momento do evento (0 min antes)
+    const recurrenceFromCtx = context._recurrence ? { type: context._recurrence as string, weekday: context._recurrence_weekday as number | undefined } : undefined;
     if (isReminderAtTime(message)) {
       const finalData = { ...partial, reminder_minutes: 0 } as unknown as ExtractedEvent;
-      return await createEventAndConfirm(userId, phone, finalData);
+      return await createEventAndConfirm(userId, phone, finalData, recurrenceFromCtx);
     }
     // "não quero lembrete"
     if (isReminderDecline(message)) {
       const finalData = { ...partial, reminder_minutes: null } as unknown as ExtractedEvent;
-      return await createEventAndConfirm(userId, phone, finalData);
+      return await createEventAndConfirm(userId, phone, finalData, recurrenceFromCtx);
     }
     // Já veio com tempo especificado (ex: "30 minutos antes", "2 horas antes")
     const minutesInAnswer = parseMinutes(message);
     if (minutesInAnswer !== null && message.match(/\d|hora|minuto|meia/)) {
       const finalData = { ...partial, reminder_minutes: minutesInAnswer } as unknown as ExtractedEvent;
-      return await createEventAndConfirm(userId, phone, finalData);
+      return await createEventAndConfirm(userId, phone, finalData, recurrenceFromCtx);
     }
     if (isReminderAccept(message)) {
       // Aceitou — perguntar quanto tempo antes
@@ -580,8 +629,9 @@ async function handleAgendaCreate(
   if (step === "waiting_reminder_minutes") {
     const minutes = parseMinutes(message);
     if (minutes !== null) {
+      const recurrenceFromCtxMin = context._recurrence ? { type: context._recurrence as string, weekday: context._recurrence_weekday as number | undefined } : undefined;
       const finalData = { ...partial, reminder_minutes: minutes } as unknown as ExtractedEvent;
-      return await createEventAndConfirm(userId, phone, finalData);
+      return await createEventAndConfirm(userId, phone, finalData, recurrenceFromCtxMin);
     }
     // Não entendeu — pede de novo
     return {
@@ -669,6 +719,11 @@ async function handleAgendaCreate(
   }
 
   // ─── EXTRAÇÃO PRINCIPAL (step null ou waiting_time) ───
+  // Detecta recorrência da mensagem original (apenas no step inicial)
+  const recurrence = step === null ? detectEventRecurrence(message) : (
+    context._recurrence ? { type: context._recurrence as string, weekday: context._recurrence_weekday as number | undefined } : null
+  );
+
   // Combina contexto parcial com nova mensagem para a IA
   let combinedMessage: string;
   if (Object.keys(partial).length > 0) {
@@ -716,7 +771,7 @@ async function handleAgendaCreate(
     return {
       response: extracted.needs_clarification,
       pendingAction: "agenda_create",
-      pendingContext: { partial: extracted, step: "waiting_reminder_answer" },
+      pendingContext: { partial: extracted, step: "waiting_reminder_answer", _recurrence: recurrence?.type, _recurrence_weekday: recurrence?.weekday },
     };
   }
 
@@ -725,19 +780,20 @@ async function handleAgendaCreate(
     return {
       response: extracted.needs_clarification,
       pendingAction: "agenda_create",
-      pendingContext: { partial: extracted, step: "waiting_reminder_minutes" },
+      pendingContext: { partial: extracted, step: "waiting_reminder_minutes", _recurrence: recurrence?.type, _recurrence_weekday: recurrence?.weekday },
     };
   }
 
   // Tudo preenchido — criar evento
-  return await createEventAndConfirm(userId, phone, extracted);
+  return await createEventAndConfirm(userId, phone, extracted, recurrence ?? undefined);
 }
 
 /** Cria o evento no banco e retorna a confirmação formatada */
 async function createEventAndConfirm(
   userId: string,
   phone: string,
-  extracted: ExtractedEvent
+  extracted: ExtractedEvent,
+  recurrence?: { type: string; weekday?: number }
 ): Promise<{ response: string }> {
   const color = EVENT_TYPE_COLORS[extracted.event_type] ?? "#3b82f6";
   const emoji = EVENT_TYPE_EMOJIS[extracted.event_type] ?? "📌";
@@ -796,6 +852,65 @@ async function createEventAndConfirm(
     }
   }
 
+  // ─── Cria ocorrências futuras se evento for recorrente ───
+  const RECURRENCE_LABELS_EVENT: Record<string, string> = {
+    daily: "todo dia",
+    weekly: "toda semana",
+    monthly: "todo mês",
+  };
+  if (recurrence) {
+    const futureDates = generateRecurrenceDates(extracted.date, recurrence.type, recurrence.weekday);
+    const futureInserts = futureDates.map(d => ({
+      user_id: userId,
+      title: extracted.title,
+      event_date: d,
+      event_time: extracted.time ?? null,
+      end_time: extracted.end_time ?? null,
+      location: extracted.location ?? null,
+      event_type: extracted.event_type ?? "compromisso",
+      priority: extracted.priority ?? "media",
+      color,
+      source: "whatsapp",
+      status: "pending",
+      reminder: extracted.reminder_minutes != null,
+      reminder_minutes_before: extracted.reminder_minutes ?? null,
+      recurrence_parent_id: event.id,
+    }));
+    if (futureInserts.length > 0) {
+      await supabase.from("events").insert(futureInserts);
+    }
+  }
+
+  // ─── Cria lembrete pós-evento (followup) para eventos que precisam de confirmação ───
+  const FOLLOWUP_TYPES = ["consulta", "reuniao", "compromisso"];
+  const eventType = extracted.event_type ?? "compromisso";
+  if (FOLLOWUP_TYPES.includes(eventType) && extracted.time && !recurrence) {
+    const timeStr = extracted.time.length === 5 ? extracted.time : extracted.time.slice(0, 5);
+    const eventDateTime = new Date(`${extracted.date}T${timeStr}:00-03:00`);
+    const followupTime = new Date(eventDateTime.getTime() + 15 * 60 * 1000); // 15 min após o evento
+
+    if (followupTime > new Date()) {
+      const followupMessages: Record<string, string> = {
+        consulta: `🏥 Sua *${extracted.title}* era agora! Conseguiu ir?\n\nResponda:\n✅ *sim* — marco como feito\n🔄 *adiar* — reagendo pra outro dia`,
+        reuniao: `🤝 *${extracted.title}* era agora! A reunião aconteceu?\n\nResponda:\n✅ *aconteceu* — marco como concluída\n🔄 *adiar* — vamos reagendar`,
+        compromisso: `📌 *${extracted.title}* era agora! Deu certo?\n\nResponda:\n✅ *feito* — marco como concluído\n🔄 *adiar* — me diz o novo horário`,
+      };
+      const followupMsg = followupMessages[eventType] ?? followupMessages.compromisso;
+
+      await supabase.from("reminders").insert({
+        user_id: userId,
+        event_id: event.id,
+        whatsapp_number: phone,
+        title: extracted.title,
+        message: followupMsg,
+        send_at: followupTime.toISOString(),
+        recurrence: "none",
+        source: "event_followup",
+        status: "pending",
+      });
+    }
+  }
+
   const dateFormatted = new Date(extracted.date + "T12:00:00").toLocaleDateString(
     "pt-BR",
     { weekday: "long", day: "numeric", month: "long" }
@@ -813,6 +928,13 @@ async function createEventAndConfirm(
       ? `${mins / 60 === Math.floor(mins / 60) ? mins / 60 + " hora" + (mins / 60 > 1 ? "s" : "") : mins + " min"}`
       : `${mins} min`;
     response += `\n🔔 Te lembro ${reminderLabel} antes`;
+  }
+
+  if (recurrence) {
+    const recLabel = recurrence.type === "weekly" && recurrence.weekday != null
+      ? `toda ${["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"][recurrence.weekday]}`
+      : RECURRENCE_LABELS_EVENT[recurrence.type] ?? recurrence.type;
+    response += `\n🔁 *Recorrente:* ${recLabel}`;
   }
 
   return { response };
@@ -1785,6 +1907,63 @@ async function handleReminderSnooze(
   return `⏰ *Lembrete adiado por ${label}!*\nVou te avisar novamente às *${timeStr}*.\n\n_"${lastReminder.title}"_`;
 }
 
+// ─────────────────────────────────────────────
+// EVENT FOLLOWUP — confirma se o evento aconteceu
+// ─────────────────────────────────────────────
+async function handleEventFollowup(
+  userId: string,
+  phone: string,
+  message: string,
+  session: Record<string, unknown>
+): Promise<{ response: string; pendingAction?: string; pendingContext?: unknown }> {
+  const ctx = (session?.pending_context as Record<string, unknown>) ?? {};
+  const eventId = ctx?.event_id as string | undefined;
+  const eventTitle = (ctx?.event_title as string) || "seu compromisso";
+
+  const m = message
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+
+  // ✅ Confirmação positiva
+  if (/^(sim|s|feito|foi|aconteceu|consegui|concluido|ok|yes|fui|rolou|deu certo|certo|boa|foi sim|sim fui)$/.test(m)) {
+    if (eventId) {
+      await supabase
+        .from("events")
+        .update({ status: "done" })
+        .eq("id", eventId)
+        .eq("user_id", userId);
+    }
+    return { response: `✅ *${eventTitle}* marcado como concluído! Ótimo trabalho! 💪` };
+  }
+
+  // 🔄 Quer adiar/reagendar
+  if (/^(adiar|nao|não|n|nope|nao fui|nao consegui|nao rolou|reagendar|remarcar|cancelar)$/.test(m) ||
+      /nao (fui|consegui|foi|rolou|aconteceu)/.test(m)) {
+    // Mantém evento como pending (não cancela, apenas não confirma)
+    return {
+      response: `Tudo bem! Para quando vou remarcar *${eventTitle}*? 📅\n\n_Ex: amanhã às 15h, sexta às 10h_`,
+      pendingAction: "agenda_edit",
+      pendingContext: {
+        event_id: eventId,
+        event_title: eventTitle,
+        event_date: ctx.event_date,
+        event_time: ctx.event_time,
+        reminder_minutes: null,
+        step: "awaiting_change",
+      },
+    };
+  }
+
+  // Resposta ambígua
+  return {
+    response: `*${eventTitle}* aconteceu?\n\n✅ *sim* — marco como feito\n🔄 *adiar* — vamos reagendar`,
+    pendingAction: "event_followup",
+    pendingContext: ctx,
+  };
+}
+
 async function processImageMessage(
   replyTo: string,
   base64: string,
@@ -2012,9 +2191,10 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
 
     // Se há ação pendente e a mensagem parece ser uma resposta, mantém o contexto
     // Exclui reminder_snooze pois é ação one-shot (não tem fluxo multi-step)
+    const oneShot = ["reminder_snooze"];
     if (
       session?.pending_action &&
-      session.pending_action !== "reminder_snooze" &&
+      !oneShot.includes(session.pending_action as string) &&
       intent === "ai_chat" &&
       text.length < 150
     ) {
@@ -2064,6 +2244,11 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
       pendingContext = reminderResult.pendingContext;
     } else if (intent === "reminder_snooze") {
       responseText = await handleReminderSnooze(profile.id, sendPhone || replyTo, text);
+    } else if (intent === "event_followup") {
+      const followupResult = await handleEventFollowup(profile.id, sendPhone || replyTo, text, session ?? {});
+      responseText = followupResult.response;
+      pendingAction = followupResult.pendingAction;
+      pendingContext = followupResult.pendingContext;
     } else if (moduleChat) {
       // Chat geral com IA
       const history = await getRecentHistory(profile.id);
