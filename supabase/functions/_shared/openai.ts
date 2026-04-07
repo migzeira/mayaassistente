@@ -124,8 +124,9 @@ REGRAS DE CLASSIFICAÇÃO:
 REGRAS DE CLARIFICAÇÃO (ordem de prioridade):
 1. Se faltar título → needs_clarification: "Qual o nome ou motivo desse compromisso? 📝", clarification_type: "title"
 2. Se faltar horário (time é null) → needs_clarification: "Qual horário? 🕐", clarification_type: "time"
-3. Se o horário JÁ FOI FORNECIDO e reminder_minutes é null e NÃO houve discussão sobre lembrete → needs_clarification: "Quer que eu te lembre antes desse compromisso? 🔔", clarification_type: "reminder_offer"
-4. Se tiver lembrete explícito no texto (ex: "20 minutos antes"), preencha reminder_minutes e NÃO peça clarificação.
+3. Se o horário JÁ FOI FORNECIDO e reminder_minutes é null e NÃO houve discussão sobre lembrete → needs_clarification: "Quer que eu te lembre antes desse compromisso? 🔔\n\nPosso te avisar com antecedência ou só na hora do evento.", clarification_type: "reminder_offer"
+4. Se tiver lembrete explícito no texto (ex: "20 minutos antes", "1 hora antes", "2 horas antes"), preencha reminder_minutes em minutos e NÃO peça clarificação.
+5. Se o usuário disser "só na hora" / "me avisa na hora" / "no horário", preencha reminder_minutes: 0 e NÃO peça clarificação.
 
 CONTEXTO DE FOLLOW-UP:
 O texto pode conter dados parciais de uma extração anterior (JSON com campo "partial") + a resposta do usuário.
@@ -134,7 +135,7 @@ Quando houver dados parciais:
 - Se partial já tem time preenchido, NÃO coloque clarification_type "time".
 - Se o usuário respondeu "não"/"nao"/"não precisa"/"sem lembrete" a uma oferta de lembrete, coloque reminder_minutes: null, needs_clarification: null, clarification_type: null (evento pronto para criar).
 - Se o usuário respondeu "sim"/"quero"/"pode ser" a uma oferta de lembrete, coloque needs_clarification: "Quantos minutos antes você quer ser lembrado? ⏱️", clarification_type: "reminder_minutes".
-- Se o usuário deu um número de minutos (ex: "15", "30 minutos", "meia hora"), coloque reminder_minutes com o valor e needs_clarification: null.
+- Se o usuário deu um tempo (ex: "15", "30 minutos", "meia hora", "1 hora", "2 horas", "só na hora"), converta para minutos (horas × 60) e coloque reminder_minutes com o valor e needs_clarification: null. "só na hora" = reminder_minutes: 0.
 - Mescle os dados parciais com os novos dados extraídos. Campos já preenchidos no partial devem ser mantidos.
 
 Texto: "${text}"

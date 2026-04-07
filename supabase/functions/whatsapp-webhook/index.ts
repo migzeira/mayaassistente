@@ -409,16 +409,40 @@ const EVENT_TYPE_EMOJIS: Record<string, string> = {
   tarefa: "✏️",
 };
 
-// Detecta se o usuário está recusando lembrete
+// Detecta se o usuário NÃO quer lembrete nenhum
 function isReminderDecline(msg: string): boolean {
   const m = msg.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-  return /^(nao|n|nope|nah|sem lembrete|nao precisa|nao quero|dispenso|pode nao|nao obrigado|nao, obrigado|ta bom assim)$/.test(m);
+  return /^(nao|n|nope|nah|sem lembrete|nao precisa|nao quero|dispenso|pode nao|nao obrigado|nao, obrigado|ta bom assim|nao quero lembrete|sem aviso)$/.test(m);
 }
 
-// Detecta se o usuário está aceitando lembrete
+// Detecta se o usuário quer ser avisado NA HORA do evento (reminder_minutes = 0)
+function isReminderAtTime(msg: string): boolean {
+  const m = msg.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  return /(so (me avisa|avisa|notifica) na hora|na hora|no horario|quando chegar a hora|so na hora|avisa na hora|me avisa na hora|no momento)/.test(m);
+}
+
+// Detecta se o usuário está aceitando lembrete (com antecedência)
 function isReminderAccept(msg: string): boolean {
   const m = msg.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-  return /^(sim|s|quero|pode ser|claro|por favor|bora|pode|yes|ok|beleza|blz|com certeza|isso)$/.test(m);
+  return /^(sim|s|quero|pode ser|claro|por favor|bora|pode|yes|ok|beleza|blz|com certeza|isso|quero sim|pode|quero ser lembrado)$/.test(m);
+}
+
+// Converte texto de tempo em minutos (ex: "2 horas" → 120, "meia hora" → 30)
+function parseMinutes(msg: string): number | null {
+  const m = msg.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  // "na hora" ou "no momento" → 0 min (avisa na hora)
+  if (/(na hora|no momento|no horario|so na hora)/.test(m)) return 0;
+  // "X horas antes" / "X hora antes"
+  const hoursMatch = m.match(/(\d+(?:[.,]\d+)?)\s*hora/);
+  if (hoursMatch) return Math.round(parseFloat(hoursMatch[1].replace(",", ".")) * 60);
+  // "meia hora"
+  if (/meia hora/.test(m)) return 30;
+  // "hora e meia"
+  if (/hora e meia/.test(m)) return 90;
+  // número simples (minutos)
+  const numMatch = m.match(/(\d+)/);
+  if (numMatch) return parseInt(numMatch[1], 10);
+  return null;
 }
 
 async function handleAgendaCreate(
@@ -435,47 +459,51 @@ async function handleAgendaCreate(
   const step = (context.step as string) ?? null;
 
   // ─── STEP: waiting_reminder_answer ───
-  // Usuário está respondendo sim/não à oferta de lembrete
+  // Usuário está respondendo à oferta de lembrete
   if (step === "waiting_reminder_answer") {
+    // "só me avisa na hora" → lembrete no momento do evento (0 min antes)
+    if (isReminderAtTime(message)) {
+      const finalData = { ...partial, reminder_minutes: 0 } as unknown as ExtractedEvent;
+      return await createEventAndConfirm(userId, phone, finalData);
+    }
+    // "não quero lembrete"
     if (isReminderDecline(message)) {
-      // Usuário recusou lembrete — criar evento sem lembrete
       const finalData = { ...partial, reminder_minutes: null } as unknown as ExtractedEvent;
       return await createEventAndConfirm(userId, phone, finalData);
     }
+    // Já veio com tempo especificado (ex: "30 minutos antes", "2 horas antes")
+    const minutesInAnswer = parseMinutes(message);
+    if (minutesInAnswer !== null && message.match(/\d|hora|minuto|meia/)) {
+      const finalData = { ...partial, reminder_minutes: minutesInAnswer } as unknown as ExtractedEvent;
+      return await createEventAndConfirm(userId, phone, finalData);
+    }
     if (isReminderAccept(message)) {
-      // Usuário aceitou — perguntar quantos minutos
+      // Aceitou — perguntar quanto tempo antes
       return {
-        response: "Quantos minutos antes você quer ser lembrado? ⏱️\n\n_Ex: 10, 15, 30, 60_",
+        response: "Com quanto tempo de antecedência? ⏱️\n\n_Ex: 15 min, 30 min, 1 hora, 2 horas — ou \"só na hora\"_",
         pendingAction: "agenda_create",
         pendingContext: { partial, step: "waiting_reminder_minutes" },
       };
     }
-    // Resposta ambígua — tenta extrair com IA incluindo contexto
+    // Resposta ambígua — pede de novo
+    return {
+      response: "Quer que eu te lembre antes? Pode me dizer:\n• *30 minutos antes*\n• *1 hora antes*\n• *só na hora*\n• *não precisa*",
+      pendingAction: "agenda_create",
+      pendingContext: { partial, step: "waiting_reminder_answer" },
+    };
   }
 
   // ─── STEP: waiting_reminder_minutes ───
-  // Usuário está informando quantos minutos antes quer o lembrete
+  // Usuário está informando com quanto tempo de antecedência quer o lembrete
   if (step === "waiting_reminder_minutes") {
-    // Tenta extrair número da resposta
-    const minutesMatch = message.match(/(\d+)/);
-    if (minutesMatch) {
-      const minutes = parseInt(minutesMatch[1], 10);
+    const minutes = parseMinutes(message);
+    if (minutes !== null) {
       const finalData = { ...partial, reminder_minutes: minutes } as unknown as ExtractedEvent;
-      return await createEventAndConfirm(userId, phone, finalData);
-    }
-    // "meia hora" → 30
-    if (/meia hora/.test(message.toLowerCase())) {
-      const finalData = { ...partial, reminder_minutes: 30 } as unknown as ExtractedEvent;
-      return await createEventAndConfirm(userId, phone, finalData);
-    }
-    // "uma hora" / "1 hora" → 60
-    if (/uma hora|1\s*hora/.test(message.toLowerCase())) {
-      const finalData = { ...partial, reminder_minutes: 60 } as unknown as ExtractedEvent;
       return await createEventAndConfirm(userId, phone, finalData);
     }
     // Não entendeu — pede de novo
     return {
-      response: "Não entendi. Quantos minutos antes? Pode ser um número, ex: *15* ou *30* ⏱️",
+      response: "Não entendi. Com quanto tempo antes?\n\n_Ex: 15, 30, 1 hora, 2 horas — ou \"só na hora\"_ ⏱️",
       pendingAction: "agenda_create",
       pendingContext: { partial, step: "waiting_reminder_minutes" },
     };
@@ -570,7 +598,7 @@ async function createEventAndConfirm(
   // Sync Google Calendar (fire-and-forget)
   syncGoogleCalendar(userId, extracted.title, extracted.date, extracted.time).catch(() => {});
 
-  // Cria lembrete se solicitado
+  // Cria lembrete se solicitado (reminder_minutes >= 0 significa lembrete ativo)
   if (extracted.reminder_minutes != null && extracted.time) {
     const [y, mo, d] = extracted.date.split("-").map(Number);
     const [h, min] = extracted.time.split(":").map(Number);
@@ -579,12 +607,16 @@ async function createEventAndConfirm(
       eventDateTime.getTime() - extracted.reminder_minutes * 60 * 1000
     );
 
+    const reminderMsg = extracted.reminder_minutes === 0
+      ? `⏰ *Hora do seu compromisso!*\n${emoji} *${extracted.title}* está marcado agora às ${extracted.time}`
+      : `⏰ *Lembrete!*\nEm ${extracted.reminder_minutes} min você tem: *${extracted.title}* às ${extracted.time}`;
+
     if (reminderTime > new Date()) {
       await supabase.from("reminders").insert({
         user_id: userId,
         event_id: event.id,
         whatsapp_number: phone,
-        message: `⏰ *Lembrete!*\nEm ${extracted.reminder_minutes} minutos você tem: *${extracted.title}* às ${extracted.time}`,
+        message: reminderMsg,
         send_at: reminderTime.toISOString(),
       });
     }
@@ -599,8 +631,14 @@ async function createEventAndConfirm(
   if (extracted.time) response += `\n⏰ ${extracted.time}`;
   if (extracted.end_time) response += ` - ${extracted.end_time}`;
   if (extracted.location) response += `\n📍 ${extracted.location}`;
-  if (extracted.reminder_minutes) {
-    response += `\n🔔 Te lembro ${extracted.reminder_minutes} min antes`;
+  if (extracted.reminder_minutes === 0) {
+    response += `\n🔔 Te aviso na hora do evento`;
+  } else if (extracted.reminder_minutes != null && extracted.reminder_minutes > 0) {
+    const mins = extracted.reminder_minutes;
+    const reminderLabel = mins >= 60
+      ? `${mins / 60 === Math.floor(mins / 60) ? mins / 60 + " hora" + (mins / 60 > 1 ? "s" : "") : mins + " min"}`
+      : `${mins} min`;
+    response += `\n🔔 Te lembro ${reminderLabel} antes`;
   }
 
   return { response };
