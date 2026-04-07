@@ -15,8 +15,10 @@ import {
   Users, MessageSquare, Settings, Shield, Search, Eye, MessageCircle,
   Clock, CheckCircle, XCircle, RefreshCw, Download, CreditCard, AlertTriangle,
   TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Webhook, ChevronDown, ChevronUp, Link2, Link2Off,
+  Activity, BarChart3, UserCheck, UserX,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { ptBR } from "date-fns/locale";
 import { Navigate } from "react-router-dom";
 import UserDetailModal from "./UserDetailModal";
@@ -78,6 +80,9 @@ export default function AdminPanel() {
   const [kirvanoExpandedId, setKirvanoExpandedId] = useState<string | null>(null);
   const [kirvanoLiveRefresh, setKirvanoLiveRefresh] = useState(false);
 
+  // Analytics
+  const [analytics, setAnalytics] = useState<any>(null);
+
   // Filters
   const [userSearch, setUserSearch] = useState("");
   const [dateRange, setDateRange] = useState<DateRange>("all");
@@ -118,7 +123,7 @@ export default function AdminPanel() {
     setLoading(true);
     await Promise.all([
       loadProfiles(), loadConversations(), loadSettings(), loadPayments(), loadErrorLogs(),
-      loadKirvanoEvents(),
+      loadKirvanoEvents(), loadAnalytics(),
     ]);
     setLastRefresh(new Date());
     setLoading(false);
@@ -212,6 +217,11 @@ export default function AdminPanel() {
       .order("created_at", { ascending: false })
       .range(kirvanoPage * PAGE_SIZE, (kirvanoPage + 1) * PAGE_SIZE - 1) as any);
     if (data) { setKirvanoEvents(data); setKirvanoCount(count || 0); }
+  };
+
+  const loadAnalytics = async () => {
+    const { data, error } = await (supabase.rpc("get_admin_analytics" as any) as any);
+    if (data && !error) setAnalytics(data);
   };
 
   const loadSettings = async () => {
@@ -438,6 +448,9 @@ export default function AdminPanel() {
               <TabsTrigger value="users"><Users className="h-4 w-4 mr-1" />Usuários</TabsTrigger>
               <TabsTrigger value="conversations"><MessageSquare className="h-4 w-4 mr-1" />Conversas</TabsTrigger>
               <TabsTrigger value="payments"><CreditCard className="h-4 w-4 mr-1" />Pagamentos</TabsTrigger>
+              <TabsTrigger value="metricas" onClick={() => loadAnalytics()}>
+                <BarChart3 className="h-4 w-4 mr-1" />Métricas
+              </TabsTrigger>
               <TabsTrigger value="kirvano" onClick={() => { loadKirvanoEvents(); setKirvanoLiveRefresh(true); }} className="relative">
                 <Webhook className="h-4 w-4 mr-1" />Kirvano
                 {kirvanoEvents.some((e: any) => !e.matched_user_id) && (
@@ -656,6 +669,153 @@ export default function AdminPanel() {
                 <PaginationControls page={errPage} setPage={setErrPage} total={errCount} />
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* MÉTRICAS */}
+          <TabsContent value="metricas">
+            <div className="space-y-6">
+
+              {/* ── MRR / Assinantes ── */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Card>
+                  <CardContent className="pt-5 text-center">
+                    <UserCheck className="h-6 w-6 mx-auto text-green-400 mb-2" />
+                    <p className="text-3xl font-bold text-green-400">{analytics?.active_subscribers ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Assinantes ativos</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-5 text-center">
+                    <Activity className="h-6 w-6 mx-auto text-blue-400 mb-2" />
+                    <p className="text-3xl font-bold">{analytics?.active_today ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Ativos hoje</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-5 text-center">
+                    <Activity className="h-6 w-6 mx-auto text-violet-400 mb-2" />
+                    <p className="text-3xl font-bold">{analytics?.active_week ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Ativos 7 dias</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-5 text-center">
+                    <Activity className="h-6 w-6 mx-auto text-primary mb-2" />
+                    <p className="text-3xl font-bold">{analytics?.active_month ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Ativos este mês</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* ── Gráfico mensal ── */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5 text-primary" />
+                    Ativações vs Cancelamentos — últimos 6 meses
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {(!analytics?.monthly_events || analytics.monthly_events.length === 0) ? (
+                    <div className="flex items-center justify-center h-40 text-muted-foreground text-sm">
+                      Sem dados suficientes ainda
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={analytics.monthly_events} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="period" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                        <YAxis tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} allowDecimals={false} />
+                        <Tooltip
+                          contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
+                          labelStyle={{ color: "hsl(var(--foreground))" }}
+                        />
+                        <Bar dataKey="ativacoes" name="Ativações" fill="hsl(var(--primary))" radius={[4,4,0,0]} />
+                        <Bar dataKey="cancelamentos" name="Cancelamentos" fill="#f59e0b" radius={[4,4,0,0]} />
+                        <Bar dataKey="estornos" name="Estornos/Reembolsos" fill="#ef4444" radius={[4,4,0,0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* ── Funil de onboarding ── */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-emerald-400" />
+                      Funil de onboarding
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {(() => {
+                      const reg = analytics?.funnel_registered ?? 0;
+                      const phone = analytics?.funnel_with_phone ?? 0;
+                      const msgs = analytics?.funnel_with_messages ?? 0;
+                      const steps = [
+                        { label: "Registrou conta", value: reg, pct: 100, color: "bg-primary" },
+                        { label: "Conectou WhatsApp", value: phone, pct: reg > 0 ? Math.round((phone/reg)*100) : 0, color: "bg-blue-500" },
+                        { label: "Usou o assistente", value: msgs, pct: reg > 0 ? Math.round((msgs/reg)*100) : 0, color: "bg-emerald-500" },
+                      ];
+                      return steps.map((s, i) => (
+                        <div key={i} className="space-y-1.5">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">{s.label}</span>
+                            <span className="font-semibold tabular-nums">{s.value} <span className="text-muted-foreground font-normal text-xs">({s.pct}%)</span></span>
+                          </div>
+                          <div className="h-2 bg-muted rounded-full overflow-hidden">
+                            <div className={`h-full ${s.color} rounded-full transition-all`} style={{ width: `${s.pct}%` }} />
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </CardContent>
+                </Card>
+
+                {/* ── Churn do mês ── */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <UserX className="h-5 w-5 text-orange-400" />
+                      Churn — este mês
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-3 gap-3 text-center">
+                      <div className="space-y-1 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                        <p className="text-2xl font-bold text-green-400">{analytics?.new_this_month ?? 0}</p>
+                        <p className="text-xs text-muted-foreground">Novas ativações</p>
+                      </div>
+                      <div className="space-y-1 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                        <p className="text-2xl font-bold text-yellow-400">{analytics?.cancelled_this_month ?? 0}</p>
+                        <p className="text-xs text-muted-foreground">Cancelamentos</p>
+                      </div>
+                      <div className="space-y-1 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                        <p className="text-2xl font-bold text-red-400">{analytics?.revoked_this_month ?? 0}</p>
+                        <p className="text-xs text-muted-foreground">Estornos</p>
+                      </div>
+                    </div>
+                    {(() => {
+                      const total = (analytics?.new_this_month ?? 0) + (analytics?.active_subscribers ?? 0);
+                      const lost = (analytics?.cancelled_this_month ?? 0) + (analytics?.revoked_this_month ?? 0);
+                      const churnRate = total > 0 ? ((lost / total) * 100).toFixed(1) : "0.0";
+                      const churnNum = parseFloat(churnRate);
+                      return (
+                        <div className="p-3 rounded-lg bg-muted/30 border border-border text-center">
+                          <p className="text-xs text-muted-foreground mb-1">Taxa de churn estimada</p>
+                          <p className={`text-2xl font-bold ${churnNum < 5 ? "text-green-400" : churnNum < 15 ? "text-yellow-400" : "text-red-400"}`}>
+                            {churnRate}%
+                          </p>
+                        </div>
+                      );
+                    })()}
+                    <p className="text-xs text-muted-foreground text-center">Baseado nos eventos Kirvano deste mês</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+            </div>
           </TabsContent>
 
           {/* KIRVANO EVENTS */}
