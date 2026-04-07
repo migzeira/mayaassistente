@@ -470,6 +470,8 @@ Regras para recurrence (analise CUIDADOSAMENTE — é muito importante detectar 
 - "todo mês" / "mensalmente" (sem dia específico) → "monthly", recurrence_value = null
 - Para "toda [dia-da-semana]": recurrence_value = (0=dom, 1=seg, 2=ter, 3=qua, 4=qui, 5=sex, 6=sáb)
 - Se for recorrente semanal sem dia específico → recurrence_value = null (herda o dia do remind_at)
+- "a cada X horas" / "de X em X horas" / "todo X horas" / "a cada hora" → "hourly", recurrence_value = X (número de horas, ex: 5 → a cada 5 horas; "a cada hora" → recurrence_value = 1)
+- "a cada X minutos" / "de X em X minutos" NÃO é suportado → use "hourly" com o valor mais próximo em horas
 
 Pedido: "${message}"`;
 

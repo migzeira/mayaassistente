@@ -34,6 +34,7 @@ const RECURRENCE_LABELS: Record<string, string> = {
   weekly: "Toda semana",
   monthly: "Todo mês",
   day_of_month: "Dia do mês",
+  hourly: "A cada hora",
 };
 
 const WEEKDAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
@@ -78,6 +79,9 @@ function recurrenceLabel(r: Reminder) {
   }
   if (r.recurrence === "day_of_month" && r.recurrence_value != null) {
     return `Todo dia ${r.recurrence_value}`;
+  }
+  if (r.recurrence === "hourly" && r.recurrence_value != null) {
+    return r.recurrence_value === 1 ? "A cada hora" : `A cada ${r.recurrence_value}h`;
   }
   return RECURRENCE_LABELS[r.recurrence] ?? r.recurrence;
 }
@@ -321,6 +325,7 @@ export default function Lembretes() {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Único (não repetir)</SelectItem>
+                    <SelectItem value="hourly">A cada X horas</SelectItem>
                     <SelectItem value="daily">Todo dia</SelectItem>
                     <SelectItem value="weekly">Toda semana (mesmo dia)</SelectItem>
                     <SelectItem value="monthly">Todo mês (mesmo dia)</SelectItem>
@@ -329,6 +334,12 @@ export default function Lembretes() {
                 </Select>
               </div>
 
+              {recurrence === "hourly" && (
+                <div className="space-y-2">
+                  <Label>Intervalo (em horas)</Label>
+                  <Input type="number" min="1" max="23" value={recurrenceValue} onChange={e => setRecurrenceValue(e.target.value)} placeholder="Ex: 5 (a cada 5 horas)" />
+                </div>
+              )}
               {recurrence === "weekly" && (
                 <div className="space-y-2">
                   <Label>Dia da semana</Label>

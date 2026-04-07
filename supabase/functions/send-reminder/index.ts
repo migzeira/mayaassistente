@@ -54,7 +54,14 @@ function nextOccurrence(
     return next;
   }
 
-  return null; // "none" → sem próxima
+  if (recurrence === "hourly") {
+    // recurrenceValue = intervalo em horas (ex: 2 = a cada 2 horas)
+    const hours = recurrenceValue ?? 1;
+    next.setTime(next.getTime() + hours * 60 * 60 * 1000);
+    return next;
+  }
+
+  return null; // "none" ou tipo desconhecido → sem próxima
 }
 
 serve(async (_req) => {

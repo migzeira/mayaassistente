@@ -650,6 +650,12 @@ function detectRecurrenceFromText(
   }
   const dayOfMonthMatch = normMsg.match(/todo dia (\d{1,2})\b/);
   if (dayOfMonthMatch) return { recurrence: "day_of_month", recurrence_value: parseInt(dayOfMonthMatch[1]) };
+  // "a cada X horas" / "de X em X horas" / "todo X horas"
+  const hourlyMatch = normMsg.match(/a cada (\d+)\s*hora|de (\d+) em \2\s*hora|todo (\d+)\s*hora|a cada hora\b/);
+  if (hourlyMatch) {
+    const hours = parseInt(hourlyMatch[1] ?? hourlyMatch[2] ?? hourlyMatch[3] ?? "1");
+    return { recurrence: "hourly", recurrence_value: isNaN(hours) ? 1 : hours };
+  }
   return null;
 }
 
@@ -2386,24 +2392,28 @@ async function saveReminder(
     hour: "2-digit", minute: "2-digit",
   });
 
+  const rv = parsed.recurrence_value as number | null;
   const recurrenceLabel: Record<string, string> = lang === "en" ? {
     none: "",
+    hourly: `\n🔁 *Recurring:* every ${rv === 1 || rv == null ? "hour" : `${rv} hours`}`,
     daily: "\n🔁 *Recurring:* every day",
     weekly: "\n🔁 *Recurring:* every week",
     monthly: "\n🔁 *Recurring:* every month",
-    day_of_month: `\n🔁 *Recurring:* every ${parsed.recurrence_value ?? ""} of the month`,
+    day_of_month: `\n🔁 *Recurring:* every ${rv ?? ""} of the month`,
   } : lang === "es" ? {
     none: "",
+    hourly: `\n🔁 *Recurrente:* cada ${rv === 1 || rv == null ? "hora" : `${rv} horas`}`,
     daily: "\n🔁 *Recurrente:* todos los días",
     weekly: "\n🔁 *Recurrente:* todas las semanas",
     monthly: "\n🔁 *Recurrente:* todos los meses",
-    day_of_month: `\n🔁 *Recurrente:* cada día ${parsed.recurrence_value ?? ""} del mes`,
+    day_of_month: `\n🔁 *Recurrente:* cada día ${rv ?? ""} del mes`,
   } : {
     none: "",
+    hourly: `\n🔁 *Recorrente:* a cada ${rv === 1 || rv == null ? "hora" : `${rv} horas`}`,
     daily: "\n🔁 *Recorrente:* todo dia",
     weekly: "\n🔁 *Recorrente:* toda semana",
     monthly: "\n🔁 *Recorrente:* todo mês",
-    day_of_month: `\n🔁 *Recorrente:* todo dia ${parsed.recurrence_value ?? ""} do mês`,
+    day_of_month: `\n🔁 *Recorrente:* todo dia ${rv ?? ""} do mês`,
   };
 
   const advanceNote = advanceMin > 0
