@@ -94,6 +94,7 @@ type Intent =
   | "agenda_delete"
   | "notes_save"
   | "reminder_set"
+  | "reminder_snooze"
   | "ai_chat";
 
 function classifyIntent(msg: string): Intent {
@@ -141,6 +142,15 @@ function classifyIntent(msg: string): Intent {
     )
   )
     return "notes_save";
+
+  // Snooze de lembrete — adiar um lembrete recente
+  if (
+    /^snooze\b/.test(m) ||
+    m === "adiar" ||
+    m === "adia" ||
+    /^snooze \d/.test(m) ||
+    /^adiar?\s+\d+\s*(min|minuto|hora)/.test(m)
+  ) return "reminder_snooze";
 
   // Lembrete simples — exige forma imperativa (não pega perguntas sobre a Maya)
   // Evita falso positivo em "você não vai me lembrar?", "ia me lembrar", etc.
@@ -470,6 +480,46 @@ function parseMinutes(msg: string): number | null {
   return null;
 }
 
+// Converte "HH:MM" em minutos totais desde meia-noite
+function timeToMinutes(time: string): number {
+  const parts = time.slice(0, 5).split(":");
+  return parseInt(parts[0], 10) * 60 + (parseInt(parts[1], 10) || 0);
+}
+
+// Verifica se há conflito de horário com eventos existentes
+async function checkTimeConflict(
+  userId: string,
+  date: string,
+  time: string,
+  endTime: string | null | undefined
+): Promise<{ title: string; event_time: string } | null> {
+  const { data: existing } = await supabase
+    .from("events")
+    .select("id, title, event_time, end_time, event_type")
+    .eq("user_id", userId)
+    .eq("event_date", date)
+    .eq("status", "pending")
+    .not("event_time", "is", null);
+
+  if (!existing || existing.length === 0) return null;
+
+  const newStart = timeToMinutes(time);
+  // Assume 60 min de duração se end_time não fornecido
+  const newEnd = endTime ? timeToMinutes(endTime) : newStart + 60;
+
+  for (const ev of existing) {
+    const evStart = timeToMinutes(ev.event_time.slice(0, 5));
+    const evEnd = ev.end_time ? timeToMinutes(ev.end_time.slice(0, 5)) : evStart + 60;
+
+    // Verificação de sobreposição: start1 < end2 AND start2 < end1
+    if (newStart < evEnd && evStart < newEnd) {
+      return { title: ev.title, event_time: ev.event_time.slice(0, 5) };
+    }
+  }
+
+  return null;
+}
+
 async function handleAgendaCreate(
   userId: string,
   phone: string,
@@ -534,6 +584,83 @@ async function handleAgendaCreate(
     };
   }
 
+  // ─── STEP: conflict_resolution ───
+  // Usuário está resolvendo um conflito de horário
+  if (step === "conflict_resolution") {
+    const savedPartial = context.partial as ExtractedEvent;
+    const m = message
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+
+    // Opção 1: Marcar assim mesmo
+    if (/^1$|marcar assim|deixa assim|pode marcar|cria assim|manter|sim|claro|pode/.test(m)) {
+      // Se ainda precisa perguntar sobre lembrete
+      if (context.reminder_pending) {
+        return {
+          response: "Perfeito! Quer que eu te lembre deste evento? ⏱️\n\n_Ex: 15 min antes, 1 hora, só na hora ou não_",
+          pendingAction: "agenda_create",
+          pendingContext: { partial: savedPartial, step: "waiting_reminder_answer" },
+        };
+      }
+      return await createEventAndConfirm(userId, phone, savedPartial);
+    }
+
+    // Opção 2: Mudar horário
+    if (/^2$|mudar|trocar|outro hor|alterar hor|novo hor|muda|troca/.test(m)) {
+      return {
+        response: "Qual o novo horário? ⏰\n_Ex: 15:00 ou 15h30_",
+        pendingAction: "agenda_create",
+        pendingContext: {
+          partial: { ...savedPartial, time: undefined, end_time: undefined },
+          step: "waiting_time",
+          reminder_pending: context.reminder_pending,
+        },
+      };
+    }
+
+    // Opção 3: Cancelar
+    if (/^3$|^nao$|^não$|^cancelar?$|^desist|^nao quero/.test(m)) {
+      return { response: "Ok! Evento não criado. Se quiser agendar outro horário, é só me dizer. 👍" };
+    }
+
+    // Usuário digitou um horário diretamente
+    const timeMatch = message.match(/(\d{1,2})[h:](\d{0,2})/);
+    if (timeMatch) {
+      const hh = timeMatch[1].padStart(2, "0");
+      const mm = (timeMatch[2] || "00").padStart(2, "0");
+      const newTime = `${hh}:${mm}`;
+      const newData = { ...savedPartial, time: newTime, end_time: undefined } as ExtractedEvent;
+
+      // Verifica conflito para o novo horário também
+      const conflict = await checkTimeConflict(userId, newData.date, newTime, null);
+      if (conflict) {
+        return {
+          response: `⚠️ Esse horário também conflita com *${conflict.title}* às ${conflict.event_time}.\n\nQuer:\n1️⃣ Marcar assim mesmo\n2️⃣ Tentar outro horário\n3️⃣ Cancelar`,
+          pendingAction: "agenda_create",
+          pendingContext: { partial: newData, step: "conflict_resolution", reminder_pending: context.reminder_pending },
+        };
+      }
+
+      if (context.reminder_pending) {
+        return {
+          response: "Horário atualizado! Quer que eu te lembre deste evento? ⏱️\n\n_Ex: 15 min antes, 1 hora, só na hora ou não_",
+          pendingAction: "agenda_create",
+          pendingContext: { partial: newData, step: "waiting_reminder_answer" },
+        };
+      }
+      return await createEventAndConfirm(userId, phone, newData);
+    }
+
+    // Resposta ambígua
+    return {
+      response: "Por favor escolha:\n1️⃣ Marcar assim mesmo\n2️⃣ Mudar o horário\n3️⃣ Cancelar",
+      pendingAction: "agenda_create",
+      pendingContext: { ...context },
+    };
+  }
+
   // ─── EXTRAÇÃO PRINCIPAL (step null ou waiting_time) ───
   // Combina contexto parcial com nova mensagem para a IA
   let combinedMessage: string;
@@ -560,6 +687,21 @@ async function handleAgendaCreate(
       pendingAction: "agenda_create",
       pendingContext: { partial: extracted, step: "waiting_time" },
     };
+  }
+
+  // ─── Verificação de conflito de horário ───
+  if (extracted.date && extracted.time && step !== "conflict_resolution") {
+    const conflict = await checkTimeConflict(userId, extracted.date, extracted.time, extracted.end_time);
+    if (conflict) {
+      const reminderPending = !extracted.needs_clarification
+        ? false
+        : extracted.clarification_type === "reminder_offer";
+      return {
+        response: `⚠️ *Conflito de horário!*\nVocê já tem *${conflict.title}* às ${conflict.event_time}.\n\nO que prefere?\n1️⃣ Marcar assim mesmo\n2️⃣ Mudar o horário\n3️⃣ Cancelar`,
+        pendingAction: "agenda_create",
+        pendingContext: { partial: extracted, step: "conflict_resolution", reminder_pending: reminderPending },
+      };
+    }
   }
 
   // Se a IA oferece lembrete (horário já existe, lembrete não discutido)
@@ -1564,6 +1706,78 @@ async function saveReminder(
   };
 }
 
+// ─────────────────────────────────────────────
+// SNOOZE — adia o último lembrete enviado
+// ─────────────────────────────────────────────
+async function handleReminderSnooze(
+  userId: string,
+  phone: string,
+  message: string
+): Promise<string> {
+  // Busca o lembrete enviado mais recentemente (nos últimos 30 min)
+  const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+
+  const { data: lastReminder } = await supabase
+    .from("reminders")
+    .select("id, title, message, event_id, whatsapp_number")
+    .eq("user_id", userId)
+    .eq("status", "sent")
+    .gte("sent_at", thirtyMinAgo)
+    .order("sent_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!lastReminder) {
+    return "Não encontrei nenhum lembrete recente para adiar. 🔍\n\n_O snooze funciona quando enviado em até 30 minutos após um lembrete._";
+  }
+
+  // Extrai duração do snooze da mensagem (padrão: 30 min)
+  const m = message.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  let snoozeMin = 30;
+
+  const hoursMatch = m.match(/(\d+(?:[.,]\d+)?)\s*hora/);
+  if (hoursMatch) {
+    snoozeMin = Math.round(parseFloat(hoursMatch[1].replace(",", ".")) * 60);
+  } else if (/meia hora/.test(m)) {
+    snoozeMin = 30;
+  } else {
+    const minsMatch = m.match(/(\d+)\s*(?:min|minutos?)?/);
+    if (minsMatch && parseInt(minsMatch[1]) > 0 && parseInt(minsMatch[1]) <= 480) {
+      snoozeMin = parseInt(minsMatch[1]);
+    }
+  }
+
+  // Garante snooze razoável: entre 5 e 8h
+  snoozeMin = Math.max(5, Math.min(snoozeMin, 480));
+
+  const newSendAt = new Date(Date.now() + snoozeMin * 60 * 1000);
+
+  await supabase.from("reminders").insert({
+    user_id: userId,
+    whatsapp_number: lastReminder.whatsapp_number ?? phone,
+    title: lastReminder.title,
+    message: lastReminder.message,
+    send_at: newSendAt.toISOString(),
+    event_id: lastReminder.event_id ?? null,
+    recurrence: "none",
+    source: "snooze",
+    status: "pending",
+  });
+
+  const timeStr = newSendAt.toLocaleTimeString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const label =
+    snoozeMin >= 60
+      ? `${snoozeMin / 60 === Math.floor(snoozeMin / 60) ? snoozeMin / 60 + " hora" + (snoozeMin / 60 > 1 ? "s" : "") : snoozeMin + " min"}`
+      : `${snoozeMin} min`;
+
+  return `⏰ *Lembrete adiado por ${label}!*\nVou te avisar novamente às *${timeStr}*.\n\n_"${lastReminder.title}"_`;
+}
+
 async function processImageMessage(
   replyTo: string,
   base64: string,
@@ -1790,8 +2004,10 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
     let intent: Intent = classifyIntent(text);
 
     // Se há ação pendente e a mensagem parece ser uma resposta, mantém o contexto
+    // Exclui reminder_snooze pois é ação one-shot (não tem fluxo multi-step)
     if (
       session?.pending_action &&
+      session.pending_action !== "reminder_snooze" &&
       intent === "ai_chat" &&
       text.length < 150
     ) {
@@ -1839,6 +2055,8 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
       responseText = reminderResult.response;
       pendingAction = reminderResult.pendingAction;
       pendingContext = reminderResult.pendingContext;
+    } else if (intent === "reminder_snooze") {
+      responseText = await handleReminderSnooze(profile.id, sendPhone || replyTo, text);
     } else if (moduleChat) {
       // Chat geral com IA
       const history = await getRecentHistory(profile.id);

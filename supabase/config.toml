@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.send-reminder]
 verify_jwt = false
+
+[functions.daily-briefing]
+verify_jwt = false
