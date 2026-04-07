@@ -229,6 +229,7 @@ async function checkRateLimit(phone: string): Promise<{ allowed: boolean; reason
 // INTENT CLASSIFIER (regex first, sem custo IA)
 // ─────────────────────────────────────────────
 type Intent =
+  | "greeting"
   | "finance_record"
   | "finance_report"
   | "agenda_create"
@@ -247,6 +248,12 @@ function classifyIntent(msg: string): Intent {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
+
+  // Saudação simples — deve ser primeira verificação (antes de qualquer outro intent)
+  if (
+    /^(oi|ola|olá|hello|hi|hey|bom dia|boa tarde|boa noite|hola|buenos dias|buenas tardes|buenas noches|good morning|good afternoon|good evening|good night|e ai|e aí|salve|fala|opa|tudo bem|tudo bom|como vai|como estas|como esta)[\s!,?.]*$/.test(m)
+  )
+    return "greeting";
 
   // Relatório financeiro (antes de finance_record para evitar falso positivo)
   if (
@@ -1826,8 +1833,15 @@ async function handleNotesSave(
   userId: string,
   phone: string,
   message: string,
-  session: Record<string, unknown> | null
+  session: Record<string, unknown> | null,
+  config: Record<string, unknown> | null = null
 ): Promise<{ response: string; pendingAction?: string; pendingContext?: unknown }> {
+  const userNickname = (config?.user_nickname as string) || "";
+  const tplNote = (config?.template_note as string) || '📝 *Anotado, {{user_name}}!*\n"{{content}}"';
+  const buildNoteResponse = (content: string): string => {
+    const noteLine = applyTemplate(tplNote, { content, user_name: userNickname });
+    return `${noteLine}\n\nQuer que eu te lembre sobre isso mais tarde? ⏰\n_Diga o horário ou "não precisa"_`;
+  };
   const ctx = (session?.pending_context as Record<string, unknown>) ?? {};
   const step = (ctx.step as string) ?? null;
 
@@ -1865,7 +1879,7 @@ async function handleNotesSave(
     syncNotion(userId, cleanContent).catch(() => {});
 
     return {
-      response: `📝 *Anotado!*\n_"${cleanContent}"_\n\nQuer que eu te lembre sobre isso mais tarde? ⏰\n_Diga o horário ou "não precisa"_`,
+      response: buildNoteResponse(cleanContent),
       pendingAction: "notes_save",
       pendingContext: { step: "note_reminder_offer", noteTitle: suggestedTitle || cleanContent.slice(0, 40) },
     };
@@ -2005,12 +2019,13 @@ async function handleNotesSave(
   if (error) throw error;
   syncNotion(userId, analysis.cleanContent).catch(() => {});
 
-  // Pergunta se quer lembrete
-  let responseText = `📝 *Anotado!*\n_"${analysis.cleanContent}"_\n\nQuer que eu te lembre sobre isso mais tarde? ⏰\n_Diga o horário ou "não precisa"_`;
+  // Pergunta se quer lembrete (usando template personalizado do usuário)
+  let responseText = buildNoteResponse(analysis.cleanContent);
 
   // Se tem mais info a perguntar, adiciona após confirmar lembrete
   if (analysis.needsMoreInfo && analysis.moreInfoQuestion) {
-    responseText = `📝 *Anotado!*\n_"${analysis.cleanContent}"_\n\n${analysis.moreInfoQuestion}\n\n_Ou diga "não precisa" para pular_`;
+    const noteLine = applyTemplate(tplNote, { content: analysis.cleanContent, user_name: userNickname });
+    responseText = `${noteLine}\n\n${analysis.moreInfoQuestion}\n\n_Ou diga "não precisa" para pular_`;
     // Vai aguardar resposta de mais info e depois oferecer lembrete
     return {
       response: responseText,
@@ -2732,7 +2747,23 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
     let pendingAction: string | undefined;
     let pendingContext: unknown;
 
-    if (!moduleActive) {
+    if (intent === "greeting") {
+      // Saudação: usa greeting_message personalizado do usuário ou fallback padrão
+      const tplGreeting = (config?.greeting_message as string)
+        || "Olá, {{user_name}}! Sou a {{agent_name}}, sua assistente pessoal. Como posso ajudar?";
+      const greetName = userNickname || pushName || "você";
+      responseText = applyTemplate(tplGreeting, {
+        user_name: greetName,
+        agent_name: agentName,
+      });
+      // Traduz se necessário (a template pode estar em PT mas usuário preferir EN/ES)
+      if (language !== "pt-BR") {
+        responseText = await translateIfNeeded(responseText, language);
+      }
+      await sendText(sendPhone || replyTo, responseText);
+      log.push("greeting_sent");
+      return log; // early return — não salva sessão pendente, não incrementa contador de módulos
+    } else if (!moduleActive) {
       // ── Módulo desativado: informa o usuário e limpa fluxo pendente ──
       responseText = getModuleDisabledMsg(intent, language, modules);
       pendingAction = undefined;   // evita usuário preso em fluxo de módulo desativado
@@ -2761,7 +2792,7 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
     } else if (intent === "agenda_delete") {
       responseText = await handleAgendaDelete(profile.id, text);
     } else if (intent === "notes_save") {
-      const notesResult = await handleNotesSave(profile.id, sendPhone || replyTo, text, session);
+      const notesResult = await handleNotesSave(profile.id, sendPhone || replyTo, text, session, config);
       responseText = notesResult.response;
       pendingAction = notesResult.pendingAction;
       pendingContext = notesResult.pendingContext;
