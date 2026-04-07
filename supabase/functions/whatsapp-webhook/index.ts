@@ -1873,6 +1873,7 @@ async function handleNotesSave(
   userTz = "America/Sao_Paulo"
 ): Promise<{ response: string; pendingAction?: string; pendingContext?: unknown }> {
   const userNickname = (config?.user_nickname as string) || "";
+  const noteLang = (config?.language as string) || "pt-BR";
   const tplNote = (config?.template_note as string) || '📝 *Anotado, {{user_name}}!*\n"{{content}}"';
   const buildNoteResponse = (content: string): string => {
     const noteLine = applyTemplate(tplNote, { content, user_name: userNickname });
@@ -1900,7 +1901,7 @@ async function handleNotesSave(
         };
       }
       // Redireciona para criação de evento com a mensagem original
-      return await handleAgendaCreate(userId, phone, originalMessage, null, "pt-BR", null, userTz);
+      return await handleAgendaCreate(userId, phone, originalMessage, null, noteLang, userNickname || null, userTz);
     }
 
     // Usuário quer salvar como nota (opção 2, ou qualquer outra resposta = fallback)
@@ -1926,7 +1927,7 @@ async function handleNotesSave(
     // Combina detalhes extras com a mensagem original e cria evento
     const originalMessage = ctx.originalMessage as string;
     const combinedMessage = `${originalMessage} — ${message}`;
-    return await handleAgendaCreate(userId, phone, combinedMessage, null, "pt-BR", null, userTz);
+    return await handleAgendaCreate(userId, phone, combinedMessage, null, noteLang, userNickname || null, userTz);
   }
 
   // ─── STEP: note_extra_info ───
