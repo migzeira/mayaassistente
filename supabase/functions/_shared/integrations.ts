@@ -53,13 +53,21 @@ async function getIntegration(userId: string, provider: string) {
       }),
     });
     const tokens = await res.json();
-    if (tokens.access_token) {
+    if (tokens.access_token && typeof tokens.expires_in === "number") {
       const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
       await supabase
         .from("integrations")
         .update({ access_token: tokens.access_token, expires_at: expiresAt })
         .eq("id", data.id);
       data.access_token = tokens.access_token;
+    } else if (tokens.error === "invalid_grant") {
+      // Refresh token expirou — desconecta integração automaticamente
+      console.error("Google refresh token expired, disconnecting integration:", data.id);
+      await supabase
+        .from("integrations")
+        .update({ is_connected: false, access_token: null, refresh_token: null })
+        .eq("id", data.id);
+      return null;
     } else {
       console.error("Google token refresh failed:", tokens.error_description ?? tokens.error);
     }

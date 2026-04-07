@@ -12,10 +12,21 @@ const supabaseAdmin = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, content-type",
-};
+const ALLOWED_ORIGINS = [
+  "https://minhamaya.com.br",
+  "https://www.minhamaya.com.br",
+  "http://localhost:5173",
+  "http://localhost:3000",
+];
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get("Origin") ?? "";
+  return {
+    "Access-Control-Allow-Origin": ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],
+    "Access-Control-Allow-Headers": "authorization, content-type",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  };
+}
 
 const ALLOWED_KEYS = [
   "whatsapp_number",
@@ -27,6 +38,7 @@ const ALLOWED_KEYS = [
 ];
 
 serve(async (req) => {
+  const CORS = getCorsHeaders(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
 
   // Verifica autenticação

@@ -28,10 +28,11 @@ const BLOCK_DURATION_MS     = 60 * 60 * 1000; // 1h block after burst
 async function checkRateLimit(phone: string): Promise<{ allowed: boolean; reason?: string }> {
   const now = new Date();
   const minuteAgo = new Date(now.getTime() - 60_000).toISOString();
+  const hourAgo = new Date(now.getTime() - 3_600_000).toISOString();
 
   const { data: row } = await supabase
     .from("rate_limits")
-    .select("count, window_start, blocked_until")
+    .select("count, hour_count, window_start, hour_window_start, blocked_until")
     .eq("phone_number", phone)
     .maybeSingle();
 
@@ -40,36 +41,39 @@ async function checkRateLimit(phone: string): Promise<{ allowed: boolean; reason
     return { allowed: false, reason: "blocked" };
   }
 
-  // Reset window if older than 1 minute
+  // Contadores por minuto
   const windowStart = row?.window_start ?? now.toISOString();
-  const isNewWindow = !row || new Date(windowStart) < new Date(minuteAgo);
+  const isNewMinuteWindow = !row || new Date(windowStart) < new Date(minuteAgo);
+  const minuteCount = isNewMinuteWindow ? 1 : (row?.count ?? 0) + 1;
 
-  if (isNewWindow) {
-    await supabase.from("rate_limits").upsert({
-      phone_number: phone,
-      count: 1,
-      window_start: now.toISOString(),
-      blocked_until: null,
-    }, { onConflict: "phone_number" });
-    return { allowed: true };
-  }
+  // Contadores por hora
+  const hourWindowStart = row?.hour_window_start ?? now.toISOString();
+  const isNewHourWindow = !row?.hour_window_start || new Date(hourWindowStart) < new Date(hourAgo);
+  const hourCount = isNewHourWindow ? 1 : (row?.hour_count ?? 0) + 1;
 
-  const newCount = (row?.count ?? 0) + 1;
-
-  if (newCount > RATE_LIMIT_PER_MINUTE) {
+  // Bloqueia se excedeu minuto OU hora
+  if (minuteCount > RATE_LIMIT_PER_MINUTE || hourCount > RATE_LIMIT_PER_HOUR) {
     const blockedUntil = new Date(now.getTime() + BLOCK_DURATION_MS).toISOString();
     await supabase.from("rate_limits").upsert({
       phone_number: phone,
-      count: newCount,
-      window_start: windowStart,
+      count: minuteCount,
+      window_start: isNewMinuteWindow ? now.toISOString() : windowStart,
+      hour_count: hourCount,
+      hour_window_start: isNewHourWindow ? now.toISOString() : hourWindowStart,
       blocked_until: blockedUntil,
     }, { onConflict: "phone_number" });
     return { allowed: false, reason: "rate_exceeded" };
   }
 
-  await supabase.from("rate_limits")
-    .update({ count: newCount })
-    .eq("phone_number", phone);
+  // Atualiza contadores
+  await supabase.from("rate_limits").upsert({
+    phone_number: phone,
+    count: minuteCount,
+    window_start: isNewMinuteWindow ? now.toISOString() : windowStart,
+    hour_count: hourCount,
+    hour_window_start: isNewHourWindow ? now.toISOString() : hourWindowStart,
+    blocked_until: null,
+  }, { onConflict: "phone_number" });
 
   return { allowed: true };
 }
@@ -228,8 +232,24 @@ const CATEGORY_SYNONYMS: Record<string, string[]> = {
 };
 
 function detectCategory(m: string): string | null {
+  // Normaliza e tokeniza pra evitar falsos positivos (ex: "moto" != "moradia")
+  const normalized = m
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const tokens = normalized.split(/\s+/);
+
   for (const [cat, keywords] of Object.entries(CATEGORY_SYNONYMS)) {
-    if (keywords.some((k) => m.includes(k))) return cat;
+    const normalizedKeywords = keywords.map((k) =>
+      k.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    );
+    // Multi-word keywords: substring match. Single-word: exact token match.
+    const found = normalizedKeywords.some((k) =>
+      k.includes(" ")
+        ? normalized.includes(k)
+        : tokens.includes(k)
+    );
+    if (found) return cat;
   }
   return null;
 }
