@@ -44,6 +44,10 @@ Regras:
     userPrompt = `Gere uma mensagem de bom dia para ${userName}. Hoje é ${dow} e não há nada agendado. Pergunte de forma natural e acolhedora se há algo que ${userName} queira agendar, criar um lembrete ou anotar para hoje ou essa semana. Varie a abordagem para não parecer um robô — seja criativa e genuína.`;
   }
 
+  // Timeout de 20s para Anthropic — se travar, usa fallback e envia mesmo assim
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20_000);
+
   try {
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -58,7 +62,9 @@ Regras:
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
       }),
+      signal: controller.signal,
     });
+    clearTimeout(timer);
 
     if (!resp.ok) {
       console.error("Anthropic API error:", resp.status, await resp.text());
@@ -68,7 +74,12 @@ Regras:
     const data = await resp.json();
     return data.content?.[0]?.text ?? fallbackMessage(userName, scheduleLines);
   } catch (err) {
-    console.error("AI briefing error:", err);
+    clearTimeout(timer);
+    if (err instanceof Error && err.name === "AbortError") {
+      console.error("Anthropic API timeout — using fallback message");
+    } else {
+      console.error("AI briefing error:", err);
+    }
     return fallbackMessage(userName, scheduleLines);
   }
 }
@@ -155,8 +166,8 @@ serve(async (_req) => {
         .neq("status", "cancelled")
         .order("event_time", { ascending: true });
 
-      // Busca lembretes pendentes de hoje
-      const todayStart = `${todayBRT}T00:00:00.000Z`;
+      // Busca lembretes pendentes de hoje — usa BRT explícito para evitar incluir lembretes do dia anterior
+      const todayStart = new Date(`${todayBRT}T00:00:00-03:00`).toISOString();
       const todayEndBRT = new Date(`${todayBRT}T23:59:59-03:00`).toISOString();
       const { data: reminders } = await supabase
         .from("reminders")

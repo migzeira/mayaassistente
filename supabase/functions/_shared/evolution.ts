@@ -99,17 +99,31 @@ function normalizePhone(phone: string): string {
 }
 
 async function evolutionPost(path: string, body: unknown): Promise<unknown> {
-  const res = await fetch(`${EVOLUTION_URL}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: EVOLUTION_KEY,
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Evolution API error ${res.status}: ${err}`);
+  // Timeout de 15s — impede que a função fique pendurada se a Evolution API travar
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
+
+  try {
+    const res = await fetch(`${EVOLUTION_URL}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: EVOLUTION_KEY,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Evolution API error ${res.status}: ${err}`);
+    }
+    return res.json();
+  } catch (err) {
+    clearTimeout(timer);
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("Evolution API timeout after 15s");
+    }
+    throw err;
   }
-  return res.json();
 }
