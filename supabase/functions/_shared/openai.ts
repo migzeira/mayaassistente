@@ -112,9 +112,11 @@ export interface ExtractedEvent {
 /** Extrai dados de evento/agenda do texto do usuário (fluxo conversacional multi-step) */
 export async function extractEvent(
   text: string,
-  today: string
+  today: string,
+  lang = "pt-BR"
 ): Promise<ExtractedEvent> {
-  const system = `Você é um extrator de dados de agenda inteligente. Responda APENAS com JSON válido, sem markdown, sem explicações.`;
+  const langLabel = lang === "en" ? "English" : lang === "es" ? "Spanish" : "Portuguese Brazilian";
+  const system = `You are an intelligent calendar data extractor. Respond ONLY with valid JSON, no markdown, no explanations. Write the "needs_clarification" field in ${langLabel}.`;
 
   const prompt = `Extraia informações de evento/agenda do texto. Hoje é ${today} (use como referência para datas relativas como "amanhã", "semana que vem", "dia 15", etc).
 
@@ -168,9 +170,11 @@ Responda SOMENTE com o JSON.`;
 /** Analisa uma consulta de agenda e retorna o intervalo de datas desejado */
 export async function parseAgendaQuery(
   text: string,
-  today: string
+  today: string,
+  lang = "pt-BR"
 ): Promise<{ start_date: string; end_date: string; description: string }> {
-  const system = `Você é um parser de consultas de agenda. Responda APENAS com JSON válido, sem markdown.`;
+  const langLabel = lang === "en" ? "English" : lang === "es" ? "Spanish" : "Portuguese Brazilian";
+  const system = `You are a calendar query parser. Respond ONLY with valid JSON, no markdown. Write the "description" field in ${langLabel}.`;
 
   const prompt = `Analise a consulta de agenda e determine o intervalo de datas. Hoje é ${today}.
 
@@ -364,22 +368,38 @@ export async function assistantChat(
   customInstructions: string | null,
   history: ChatMessage[]
 ): Promise<string> {
-  const userRef = userNickname ? `Chame o usuário de "${userNickname}".` : "";
-  const extra = customInstructions ? `\n\nInstruções adicionais:\n${customInstructions}` : "";
+  const TONE_DESCRIPTIONS: Record<string, string> = {
+    profissional: "Use a formal, professional tone. Speak formally, avoid slang, be direct and concise. Use at most 1-2 emojis per message. Address the user with respect.",
+    casual: "Use a relaxed, natural tone. Everyday language, light slang is OK. Moderate emoji use (2-3 per message). Be friendly like a colleague.",
+    amigavel: "Use a warm, enthusiastic, caring tone. Use emojis generously (3-5 per message). Celebrate the user's achievements. Be close and affectionate like a trusted friend.",
+    tecnico: "Use a technical, precise tone. Prioritize data, exact numbers, structured formatting. Use at most 1 emoji per message. Use technical terminology when relevant.",
+  };
 
-  const systemPrompt = `Você é ${agentName}, assistente pessoal inteligente via WhatsApp.
-Tom: ${tone}. Idioma: ${language}.
+  const LANGUAGE_INSTRUCTIONS: Record<string, string> = {
+    "pt-BR": "Responda SEMPRE em Português Brasileiro. Todas as mensagens, confirmações, perguntas e erros devem estar em Português Brasileiro.",
+    "en": "You MUST respond EXCLUSIVELY in English. ALL messages, confirmations, questions, suggestions and error messages must be in English, regardless of what language the user writes in. Do NOT mix languages.",
+    "es": "Debes responder EXCLUSIVAMENTE en Español. TODOS los mensajes, confirmaciones, preguntas, sugerencias y errores deben estar en Español, sin importar el idioma del usuario. NO mezcles idiomas.",
+  };
+
+  const toneInstruction = TONE_DESCRIPTIONS[tone] ?? TONE_DESCRIPTIONS["casual"];
+  const langInstruction = LANGUAGE_INSTRUCTIONS[language] ?? LANGUAGE_INSTRUCTIONS["pt-BR"];
+  const userRef = userNickname ? `Always address the user as "${userNickname}".` : "";
+  const extra = customInstructions ? `\n\nAdditional instructions:\n${customInstructions}` : "";
+
+  const systemPrompt = `You are ${agentName}, an intelligent personal assistant via WhatsApp.
+${langInstruction}
+Tone: ${toneInstruction}
 ${userRef}
-Você ajuda com finanças, agenda, anotações e conversas gerais.
-Seja conciso e natural. Não mencione que é IA a menos que perguntado.
-Não invente dados financeiros — se perguntado sobre gastos específicos e não tiver a informação, diga que não encontrou registros com essa descrição.
+You help with finances, calendar/agenda, notes, reminders and general conversation.
+Be concise and natural. Do not mention being an AI unless asked.
+Do not invent financial data — if asked about specific expenses and you don't have the info, say no records were found.
 
-CAPACIDADES REAIS DO SISTEMA (NUNCA nege estas capacidades):
-- Você PODE e FAZ envio automático de lembretes via WhatsApp (o sistema roda um job a cada minuto que dispara os avisos)
-- Quando o usuário agenda um evento com lembrete, um aviso é programado e enviado automaticamente no horário certo
-- 15 minutos após um compromisso/consulta/reunião, você envia automaticamente uma pergunta de confirmação
-- Quando um lembrete não chegou, reconheça como possível falha técnica pontual, NUNCA diga que você não tem essa capacidade
-- Se o usuário reclamar que não recebeu um aviso: peça desculpas pela falha técnica, confirme que o sistema está corrigido e reforce que os próximos lembretes funcionarão normalmente${extra}`;
+REAL SYSTEM CAPABILITIES (NEVER deny these):
+- You CAN and DO send automatic WhatsApp reminders (the system runs a job every minute)
+- When the user schedules an event with a reminder, an alert is programmed and sent automatically
+- 15 minutes after an appointment, you automatically send a follow-up check
+- If a reminder didn't arrive, acknowledge it as a possible technical glitch, NEVER say you lack this capability
+- If the user complains about a missed alert: apologize for the technical issue, confirm it's fixed and that future reminders will work normally${extra}`;
 
   const messages: ChatMessage[] = [
     ...history.slice(-6),
@@ -408,16 +428,18 @@ export interface ReminderParsed {
  */
 export async function parseReminderIntent(
   message: string,
-  nowIso: string
+  nowIso: string,
+  lang = "pt-BR"
 ): Promise<ReminderParsed | null> {
-  const system = `Você é um parser de lembretes. Responda APENAS com JSON válido, sem markdown, sem explicações.`;
+  const langLabel = lang === "en" ? "English" : lang === "es" ? "Spanish" : "Portuguese Brazilian";
+  const system = `You are a reminder intent parser. Respond ONLY with valid JSON, no markdown, no explanations. Write the "message" and "title" fields in ${langLabel}.`;
 
   const prompt = `Hora atual: ${nowIso} (America/Sao_Paulo, UTC-3).
 
 Analise o pedido de lembrete e retorne JSON com EXATAMENTE esta estrutura:
 {
   "title": "texto curto descritivo (máx 60 chars)",
-  "message": "mensagem que será enviada no lembrete (começa com ⏰)",
+  "message": "message to be sent as the reminder notification (starts with ⏰, written in ${langLabel})",
   "remind_at": "ISO 8601 com offset -03:00, ex: 2026-04-07T12:20:00-03:00",
   "recurrence": "none | daily | weekly | monthly | day_of_month",
   "recurrence_value": null ou número (dia da semana 0=dom..6=sáb para weekly; dia 1-31 para day_of_month)

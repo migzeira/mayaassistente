@@ -68,7 +68,6 @@ export default function ConfigAgente() {
 
   const handleSave = async () => {
     const { error } = await supabase.from("agent_configs").update({
-      agent_name: config.agent_name,
       user_nickname: config.user_nickname,
       tone: config.tone,
       language: config.language,
@@ -134,7 +133,10 @@ export default function ConfigAgente() {
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Nome do agente</Label>
-              <Input value={config.agent_name} onChange={e => setConfig({...config, agent_name: e.target.value})} />
+              <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-input bg-muted/50 text-sm text-muted-foreground select-none">
+                <span className="font-semibold text-foreground">Maya</span>
+                <span className="text-xs">— nome padrão da assistente</span>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Como você quer ser chamado?</Label>
@@ -147,12 +149,13 @@ export default function ConfigAgente() {
               <Select value={config.tone} onValueChange={v => setConfig({...config, tone: v})}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="profissional">Profissional</SelectItem>
-                  <SelectItem value="casual">Casual</SelectItem>
-                  <SelectItem value="amigavel">Amigável</SelectItem>
-                  <SelectItem value="tecnico">Técnico</SelectItem>
+                  <SelectItem value="profissional">🏢 Profissional — formal, objetivo, sem gírias</SelectItem>
+                  <SelectItem value="casual">😊 Casual — descontraído, linguagem do dia a dia</SelectItem>
+                  <SelectItem value="amigavel">🤗 Amigável — caloroso, entusiasmado, uso frequente de emojis</SelectItem>
+                  <SelectItem value="tecnico">🔧 Técnico — preciso, focado em dados e números</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">Define como a Maya se comunica com você no WhatsApp.</p>
             </div>
             <div className="space-y-2">
               <Label>Idioma</Label>
@@ -162,7 +165,6 @@ export default function ConfigAgente() {
                   <SelectItem value="pt-BR">Português brasileiro</SelectItem>
                   <SelectItem value="en">English</SelectItem>
                   <SelectItem value="es">Español</SelectItem>
-                  <SelectItem value="fr">Français</SelectItem>
                 </SelectContent>
               </Select>
             </div>

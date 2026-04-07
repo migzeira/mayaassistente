@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendText, extractPhone, downloadMediaBase64, resolveLidToPhone } from "../_shared/evolution.ts";
 import { syncGoogleCalendar, syncGoogleSheets, syncNotion } from "../_shared/integrations.ts";
 import {
+  chat,
   extractTransactions,
   extractEvent,
   parseAgendaQuery,
@@ -20,6 +21,64 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
+
+// ─────────────────────────────────────────────
+// LOCALIZATION HELPERS
+// ─────────────────────────────────────────────
+
+function langToLocale(lang: string): string {
+  const map: Record<string, string> = { "pt-BR": "pt-BR", "en": "en-US", "es": "es-ES" };
+  return map[lang] ?? "pt-BR";
+}
+
+function fmtDateLong(dateStr: string, lang: string): string {
+  const locale = langToLocale(lang);
+  const d = new Date(dateStr + "T12:00:00");
+  const raw = d.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" });
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function fmtTimeLang(timeStr: string, lang: string): string {
+  const [h, m] = timeStr.split(":");
+  if (lang === "en") {
+    const hour = parseInt(h, 10);
+    const ampm = hour >= 12 ? "PM" : "AM";
+    const h12 = hour % 12 || 12;
+    return `${h12}:${m} ${ampm}`;
+  }
+  return `${h.padStart(2, "0")}:${m}`;
+}
+
+function fmtAdvanceLabel(minutes: number, lang: string): string {
+  if (minutes >= 60) {
+    const hrs = minutes / 60;
+    const rounded = Math.round(hrs * 10) / 10;
+    if (lang === "en") return `${rounded} hour${rounded !== 1 ? "s" : ""}`;
+    if (lang === "es") return `${rounded} hora${rounded !== 1 ? "s" : ""}`;
+    return `${rounded} hora${rounded !== 1 ? "s" : ""}`;
+  }
+  if (lang === "en") return `${minutes} min`;
+  if (lang === "es") return `${minutes} min`;
+  return `${minutes} min`;
+}
+
+/** Translates a response text to the target language if needed (non-pt-BR). */
+async function translateIfNeeded(text: string, lang: string): Promise<string> {
+  if (!text || lang === "pt-BR") return text;
+  const targetLang = lang === "en" ? "English" : "Spanish";
+  try {
+    const result = await chat(
+      [{
+        role: "user",
+        content: `Translate the following WhatsApp message to ${targetLang}. Rules:\n- Keep ALL emojis exactly as they are\n- Keep WhatsApp formatting (*bold*, _italic_) exactly as is\n- Only translate the text content\n- Return ONLY the translated message, nothing else\n\n${text}`,
+      }],
+      `You are an expert translator. Translate accurately to ${targetLang}. Never add explanations or notes.`,
+    );
+    return result?.trim() || text;
+  } catch {
+    return text; // fallback to original on error
+  }
+}
 
 // ─────────────────────────────────────────────
 // RATE LIMITER — max 20 msgs/min, 200 msgs/hour
@@ -244,6 +303,7 @@ async function handleFinanceRecord(
       amount: t.amount.toFixed(2).replace(".", ","),
       category: t.category,
       type: t.type,
+      user_name: (config?.user_nickname as string) || "",
     });
   }
 
@@ -579,7 +639,8 @@ async function handleAgendaCreate(
   userId: string,
   phone: string,
   message: string,
-  session: Record<string, unknown> | null
+  session: Record<string, unknown> | null,
+  language = "pt-BR"
 ): Promise<{ response: string; pendingAction?: string; pendingContext?: unknown }> {
   const today = new Date().toISOString().split("T")[0];
 
@@ -775,7 +836,7 @@ async function handleAgendaCreate(
 
   let extracted: Awaited<ReturnType<typeof extractEvent>>;
   try {
-    extracted = await extractEvent(combinedMessage, today);
+    extracted = await extractEvent(combinedMessage, today, language);
   } catch (err) {
     console.error("extractEvent failed:", err);
     return {
@@ -842,7 +903,8 @@ async function createEventAndConfirm(
   userId: string,
   phone: string,
   extracted: ExtractedEvent,
-  recurrence?: { type: string; weekday?: number }
+  recurrence?: { type: string; weekday?: number },
+  lang = "pt-BR"
 ): Promise<{ response: string }> {
   const color = EVENT_TYPE_COLORS[extracted.event_type] ?? "#3b82f6";
   const emoji = EVENT_TYPE_EMOJIS[extracted.event_type] ?? "📌";
@@ -886,9 +948,16 @@ async function createEventAndConfirm(
       eventDateTime.getTime() - extracted.reminder_minutes * 60 * 1000
     );
 
-    const reminderMsg = extracted.reminder_minutes === 0
+    const reminderMsgPt = extracted.reminder_minutes === 0
       ? `⏰ *Hora do seu compromisso!*\n${emoji} *${extracted.title}* está marcado agora às ${extracted.time}`
       : `⏰ *Lembrete!*\nEm ${extracted.reminder_minutes} min você tem: *${extracted.title}* às ${extracted.time}`;
+    const reminderMsgEn = extracted.reminder_minutes === 0
+      ? `⏰ *It's time!*\n${emoji} *${extracted.title}* is now at ${fmtTimeLang(extracted.time!, lang)}`
+      : `⏰ *Reminder!*\nIn ${extracted.reminder_minutes} min you have: *${extracted.title}* at ${fmtTimeLang(extracted.time!, lang)}`;
+    const reminderMsgEs = extracted.reminder_minutes === 0
+      ? `⏰ *¡Es la hora!*\n${emoji} *${extracted.title}* está programado ahora a las ${fmtTimeLang(extracted.time!, lang)}`
+      : `⏰ *¡Recordatorio!*\nEn ${extracted.reminder_minutes} min tienes: *${extracted.title}* a las ${fmtTimeLang(extracted.time!, lang)}`;
+    const reminderMsg = lang === "en" ? reminderMsgEn : lang === "es" ? reminderMsgEs : reminderMsgPt;
 
     if (reminderTime > new Date()) {
       await supabase.from("reminders").insert({
@@ -964,10 +1033,7 @@ async function createEventAndConfirm(
     }
   }
 
-  const dateFormatted = new Date(extracted.date + "T12:00:00").toLocaleDateString(
-    "pt-BR",
-    { weekday: "long", day: "numeric", month: "long" }
-  );
+  const dateFormatted = fmtDateLong(extracted.date, lang);
 
   let response = `✅ *Agendado!*\n${emoji} ${extracted.title}\n🗓 ${dateFormatted}`;
   if (extracted.time) response += `\n⏰ ${extracted.time}`;
@@ -2021,7 +2087,8 @@ async function handleReminderSet(
   userId: string,
   phone: string,
   message: string,
-  session: Record<string, unknown> | null = null
+  session: Record<string, unknown> | null = null,
+  lang = "pt-BR"
 ): Promise<{ response: string; pendingAction?: string; pendingContext?: unknown }> {
   const nowIso = new Date().toLocaleString("sv-SE", {
     timeZone: "America/Sao_Paulo",
@@ -2039,17 +2106,17 @@ async function handleReminderSet(
 
     // "só na hora" / "na hora" → 0 min de antecedência (avisa exatamente no horário)
     if (isReminderAtTime(message)) {
-      return await saveReminder(userId, phone, parsed, remindAt, 0);
+      return await saveReminder(userId, phone, parsed, remindAt, 0, lang);
     }
     // "não precisa" → avisa na hora mesmo (sem antecedência adicional)
     if (isReminderDecline(message)) {
-      return await saveReminder(userId, phone, parsed, remindAt, 0);
+      return await saveReminder(userId, phone, parsed, remindAt, 0, lang);
     }
     // Tenta extrair minutos de antecedência
     const advanceMin = parseMinutes(message);
     if (advanceMin !== null && advanceMin > 0) {
       const advancedTime = new Date(remindAt.getTime() - advanceMin * 60 * 1000);
-      return await saveReminder(userId, phone, parsed, advancedTime, advanceMin);
+      return await saveReminder(userId, phone, parsed, advancedTime, advanceMin, lang);
     }
     // Não entendeu
     return {
@@ -2060,7 +2127,7 @@ async function handleReminderSet(
   }
 
   // ── Extrai intenção do lembrete com IA ──
-  const parsed = await parseReminderIntent(message, nowIso);
+  const parsed = await parseReminderIntent(message, nowIso, lang);
 
   if (!parsed) {
     return { response: "⚠️ Não entendi o lembrete. Tente: *me lembra de ligar pro João amanhã às 14h*" };
@@ -2098,7 +2165,7 @@ async function handleReminderSet(
   }
 
   // Tem antecedência explícita na mensagem → salva direto
-  return await saveReminder(userId, phone, parsed, remindAt, 0);
+  return await saveReminder(userId, phone, parsed, remindAt, 0, lang);
 }
 
 /** Salva o lembrete no banco e retorna confirmação formatada */
@@ -2107,7 +2174,8 @@ async function saveReminder(
   phone: string,
   parsed: Record<string, unknown>,
   remindAt: Date,
-  advanceMin: number
+  advanceMin: number,
+  lang = "pt-BR"
 ): Promise<{ response: string }> {
   const { error } = await supabase.from("reminders").insert({
     user_id: userId,
@@ -2123,16 +2191,30 @@ async function saveReminder(
 
   if (error) throw error;
 
-  const dateStr = remindAt.toLocaleDateString("pt-BR", {
+  const locale = langToLocale(lang);
+  const dateRaw = remindAt.toLocaleDateString(locale, {
     timeZone: "America/Sao_Paulo",
     weekday: "long", day: "numeric", month: "long",
   });
-  const timeStr = remindAt.toLocaleTimeString("pt-BR", {
+  const dateStr = dateRaw.charAt(0).toUpperCase() + dateRaw.slice(1);
+  const timeStr = remindAt.toLocaleTimeString(locale, {
     timeZone: "America/Sao_Paulo",
     hour: "2-digit", minute: "2-digit",
   });
 
-  const recurrenceLabel: Record<string, string> = {
+  const recurrenceLabel: Record<string, string> = lang === "en" ? {
+    none: "",
+    daily: "\n🔁 *Recurring:* every day",
+    weekly: "\n🔁 *Recurring:* every week",
+    monthly: "\n🔁 *Recurring:* every month",
+    day_of_month: `\n🔁 *Recurring:* every ${parsed.recurrence_value ?? ""} of the month`,
+  } : lang === "es" ? {
+    none: "",
+    daily: "\n🔁 *Recurrente:* todos los días",
+    weekly: "\n🔁 *Recurrente:* todas las semanas",
+    monthly: "\n🔁 *Recurrente:* todos los meses",
+    day_of_month: `\n🔁 *Recurrente:* cada día ${parsed.recurrence_value ?? ""} del mes`,
+  } : {
     none: "",
     daily: "\n🔁 *Recorrente:* todo dia",
     weekly: "\n🔁 *Recorrente:* toda semana",
@@ -2141,8 +2223,12 @@ async function saveReminder(
   };
 
   const advanceNote = advanceMin > 0
-    ? `\n🔔 Aviso ${advanceMin >= 60 ? advanceMin / 60 + " hora" + (advanceMin / 60 > 1 ? "s" : "") : advanceMin + " min"} antes`
-    : "\n🔔 Aviso na hora";
+    ? (lang === "en"
+        ? `\n🔔 Alert ${fmtAdvanceLabel(advanceMin, lang)} before`
+        : lang === "es"
+        ? `\n🔔 Aviso ${fmtAdvanceLabel(advanceMin, lang)} antes`
+        : `\n🔔 Aviso ${fmtAdvanceLabel(advanceMin, lang)} antes`)
+    : (lang === "en" ? "\n🔔 Alert at reminder time" : lang === "es" ? "\n🔔 Aviso en el horario" : "\n🔔 Aviso na hora");
 
   return {
     response: `⏰ *Lembrete criado!*\n📌 ${parsed.title}\n📅 ${dateStr} às ${timeStr}${advanceNote}${recurrenceLabel[String(parsed.recurrence)] ?? ""}\n\n_Vou te avisar aqui no WhatsApp!_`,
@@ -2480,7 +2566,7 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
 
     const agentName = config?.agent_name ?? "Maya";
     const tone = config?.tone ?? "profissional";
-    const language = config?.language ?? "Português brasileiro";
+    const language = (config?.language as string) || "pt-BR";
     const userNickname = (config?.user_nickname as string) || null;
     const customInstructions = (config?.custom_instructions as string) || null;
 
@@ -2545,7 +2631,7 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
     } else if (intent === "finance_report" && moduleFinance) {
       responseText = await handleFinanceReport(profile.id, text);
     } else if (intent === "agenda_create" && moduleAgenda) {
-      const result = await handleAgendaCreate(profile.id, sendPhone || replyTo, text, session);
+      const result = await handleAgendaCreate(profile.id, sendPhone || replyTo, text, session, language);
       responseText = result.response;
       pendingAction = result.pendingAction;
       pendingContext = result.pendingContext;
@@ -2569,7 +2655,7 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
       pendingAction = notesResult.pendingAction;
       pendingContext = notesResult.pendingContext;
     } else if (intent === "reminder_set") {
-      const reminderResult = await handleReminderSet(profile.id, sendPhone || replyTo, text, session);
+      const reminderResult = await handleReminderSet(profile.id, sendPhone || replyTo, text, session, language);
       responseText = reminderResult.response;
       pendingAction = reminderResult.pendingAction;
       pendingContext = reminderResult.pendingContext;
@@ -2588,7 +2674,10 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
       responseText = `Desculpe, não entendi. Posso ajudar com ${[moduleFinance && "finanças", moduleAgenda && "agenda", moduleNotes && "anotações"].filter(Boolean).join(", ")}.`;
     }
 
-    // 7. Envia resposta (usa phone_number do perfil com fallback para replyTo)
+    // 7. Traduz resposta se necessário e envia
+    if (language !== "pt-BR") {
+      responseText = await translateIfNeeded(responseText, language);
+    }
     await sendText(sendPhone || replyTo, responseText);
 
     // 8. Atualiza sessão

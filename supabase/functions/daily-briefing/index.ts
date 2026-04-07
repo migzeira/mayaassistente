@@ -22,17 +22,24 @@ const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY")!;
 // ─────────────────────────────────────────────
 async function generateBriefingMessage(
   userName: string,
-  scheduleLines: string | null
+  scheduleLines: string | null,
+  lang = "pt-BR"
 ): Promise<string> {
-  const systemPrompt = `Você é Maya, assistente pessoal inteligente e acolhedora da plataforma Minha Maya.
-Você envia uma mensagem matinal personalizada pelo WhatsApp todos os dias de manhã.
-Regras:
-- Máximo 200 palavras
-- Use no máximo 4 emojis
-- Tom caloroso, motivador e pessoal — como uma assistente de verdade
-- Sempre se dirija à pessoa pelo nome
-- Português brasileiro informal mas profissional
-- Nunca diga "como posso ajudar" de forma genérica — seja específica e contextual`;
+  const langInstruction = lang === "en"
+    ? "You MUST write EXCLUSIVELY in English. All text must be in English."
+    : lang === "es"
+    ? "Debes escribir EXCLUSIVAMENTE en Español. Todo el texto debe estar en Español."
+    : "Escreva EXCLUSIVAMENTE em Português Brasileiro.";
+
+  const systemPrompt = `You are Maya, an intelligent and caring personal assistant from Minha Maya platform.
+You send a personalized morning WhatsApp message every day.
+Rules:
+- Maximum 200 words
+- Use at most 4 emojis
+- Warm, motivating and personal tone — like a real assistant
+- Always address the person by their name (${userName})
+- ${langInstruction}
+- Never say "how can I help" generically — be specific and contextual`;
 
   let userPrompt: string;
 
@@ -68,7 +75,7 @@ Regras:
 
     if (!resp.ok) {
       console.error("Anthropic API error:", resp.status, await resp.text());
-      return fallbackMessage(userName, scheduleLines);
+      return fallbackMessage(userName, scheduleLines, lang);
     }
 
     const data = await resp.json();
@@ -84,7 +91,19 @@ Regras:
   }
 }
 
-function fallbackMessage(userName: string, scheduleLines: string | null): string {
+function fallbackMessage(userName: string, scheduleLines: string | null, lang = "pt-BR"): string {
+  if (lang === "en") {
+    if (scheduleLines) {
+      return `🌅 Good morning, ${userName}!\n\nHere's your summary for today:\n\n${scheduleLines}\n\nHave a great day! 💪`;
+    }
+    return `🌅 Good morning, ${userName}! Your schedule is clear today. Want to set up a reminder, schedule something, or jot down an idea? Just let me know! 😊`;
+  }
+  if (lang === "es") {
+    if (scheduleLines) {
+      return `🌅 ¡Buenos días, ${userName}!\n\nAquí está tu resumen de hoy:\n\n${scheduleLines}\n\n¡Que tengas un excelente día! 💪`;
+    }
+    return `🌅 ¡Buenos días, ${userName}! Tu agenda está libre hoy. ¿Quieres agendar algo, crear un recordatorio o anotar una idea? ¡Solo dímelo! 😊`;
+  }
   if (scheduleLines) {
     return `🌅 Bom dia, ${userName}!\n\nAqui está seu resumo de hoje:\n\n${scheduleLines}\n\nTenha um ótimo dia! 💪`;
   }
@@ -144,7 +163,7 @@ serve(async (_req) => {
       // Busca apelido e configurações do agente (inclui flag de resumo diário)
       const { data: agentConfig } = await supabase
         .from("agent_configs")
-        .select("user_nickname, daily_briefing_enabled")
+        .select("user_nickname, daily_briefing_enabled, language")
         .eq("user_id", user.id)
         .maybeSingle();
 
@@ -156,6 +175,7 @@ serve(async (_req) => {
       }
 
       const userName = (agentConfig?.user_nickname as string) || "você";
+      const userLang = (agentConfig?.language as string) || "pt-BR";
 
       // Busca eventos de hoje
       const { data: events } = await supabase
@@ -212,7 +232,7 @@ serve(async (_req) => {
       }
 
       // Gera mensagem personalizada
-      const message = await generateBriefingMessage(userName, scheduleLines);
+      const message = await generateBriefingMessage(userName, scheduleLines, userLang);
 
       // Envia via WhatsApp
       await sendText(user.phone_number, message);
