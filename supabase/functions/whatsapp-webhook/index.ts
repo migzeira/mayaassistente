@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sendText, sendImage, extractPhone, downloadMediaBase64, resolveLidToPhone } from "../_shared/evolution.ts";
+import { sendText, sendImage, sendButtons, extractPhone, downloadMediaBase64, resolveLidToPhone } from "../_shared/evolution.ts";
 import { generateExpenseChartUrl } from "../_shared/chart.ts";
 import { syncGoogleCalendar, syncGoogleSheets, syncNotion } from "../_shared/integrations.ts";
 import {
@@ -415,8 +415,8 @@ function classifyIntent(msg: string): Intent {
     // Formas de criação explícita
     /^quero um lembrete|^cria(r)? (um )?lembrete|^salva (um )?lembrete|^adiciona (um )?lembrete|^lembrete:/.test(m) ||
     // "me lembra/lembre" em qualquer posição com referência de tempo/assunto
-    /\bme lembra (de|que|do|da|às|as|amanha|hoje|semana|todo|toda|daqui|em \d|dia \d|sobre)\b/.test(m) ||
-    /\bme lembre (de|que|do|da|às|as|amanha|hoje|semana|todo|toda|daqui|em \d|dia \d|sobre)\b/.test(m) ||
+    /\bme lembra (de|que|do|da|desse|disso|às|as|amanha|hoje|semana|todo|toda|daqui|em \d|dia \d|sobre)\b/.test(m) ||
+    /\bme lembre (de|que|do|da|desse|disso|às|as|amanha|hoje|semana|todo|toda|daqui|em \d|dia \d|sobre)\b/.test(m) ||
     /\bme avisa (às|as|quando|amanha|hoje|dia \d|daqui)\b/.test(m) ||
     // Formas indiretas: "voce me lembra", "quero que voce me lembra/lembre"
     /\b(voce|você) me (lembra|lembre)\b/.test(m) ||
@@ -1318,13 +1318,44 @@ async function handleAgendaCreate(
   // ─── STEP: waiting_reminder_answer ───
   // Usuário está respondendo à oferta de lembrete
   if (step === "waiting_reminder_answer") {
-    // "só me avisa na hora" → lembrete no momento do evento (0 min antes)
     const recurrenceFromCtx = context._recurrence ? { type: context._recurrence as string, weekday: context._recurrence_weekday as number | undefined } : undefined;
+    const msgLowRem = message.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+
+    // Mapeamento de button IDs para minutos (agenda)
+    const agendaButtonMap: Record<string, number | null> = {
+      "button:advance_15min": 15,
+      "button:advance_30min": 30,
+      "button:advance_1h":    60,
+      "button:advance_confirm_no": 0,   // "Só na hora"
+    };
+    if (agendaButtonMap[msgLowRem] !== undefined) {
+      const mins = agendaButtonMap[msgLowRem];
+      const finalDataBtn = { ...partial, reminder_minutes: mins } as unknown as ExtractedEvent;
+      return await createEventAndConfirm(userId, phone, finalDataBtn, recurrenceFromCtx, language, userNickname, userTz);
+    }
+    if (msgLowRem === "button:advance_confirm_yes" || isReminderAccept(message)) {
+      // Aceitou — envia botões de tempo
+      sendButtons(
+        phone,
+        "Com quanto tempo antes? ⏱️",
+        `Lembrete para: "${(partial as Record<string,unknown>).title ?? "evento"}"`,
+        [
+          { id: "advance_15min", text: "15 minutos" },
+          { id: "advance_30min", text: "30 minutos" },
+          { id: "advance_1h",    text: "1 hora" },
+        ]
+      ).catch(() => {});
+      return {
+        response: "",
+        pendingAction: "agenda_create",
+        pendingContext: { partial, step: "waiting_reminder_minutes" },
+      };
+    }
+    // "só na hora" ou "não precisa"
     if (isReminderAtTime(message)) {
       const finalData = { ...partial, reminder_minutes: 0 } as unknown as ExtractedEvent;
       return await createEventAndConfirm(userId, phone, finalData, recurrenceFromCtx, language, userNickname, userTz);
     }
-    // "não quero lembrete"
     if (isReminderDecline(message)) {
       const finalData = { ...partial, reminder_minutes: null } as unknown as ExtractedEvent;
       return await createEventAndConfirm(userId, phone, finalData, recurrenceFromCtx, language, userNickname, userTz);
@@ -1335,17 +1366,18 @@ async function handleAgendaCreate(
       const finalData = { ...partial, reminder_minutes: minutesInAnswer } as unknown as ExtractedEvent;
       return await createEventAndConfirm(userId, phone, finalData, recurrenceFromCtx, language, userNickname, userTz);
     }
-    if (isReminderAccept(message)) {
-      // Aceitou — perguntar quanto tempo antes
-      return {
-        response: "Com quanto tempo de antecedência? ⏱️\n\n_Ex: 15 min, 30 min, 1 hora, 2 horas — ou \"só na hora\"_",
-        pendingAction: "agenda_create",
-        pendingContext: { partial, step: "waiting_reminder_minutes" },
-      };
-    }
-    // Resposta ambígua — pede de novo
+    // Resposta ambígua — reenvia botões
+    sendButtons(
+      phone,
+      "Quer que eu te lembre antes? ⏱️",
+      `Evento: "${(partial as Record<string,unknown>).title ?? "evento"}"`,
+      [
+        { id: "advance_confirm_yes", text: "⏰ Sim, me avisa" },
+        { id: "advance_confirm_no",  text: "✅ Só na hora" },
+      ]
+    ).catch(() => {});
     return {
-      response: "Quer que eu te lembre antes? Pode me dizer:\n• *30 minutos antes*\n• *1 hora antes*\n• *só na hora*\n• *não precisa*",
+      response: "",
       pendingAction: "agenda_create",
       pendingContext: { partial, step: "waiting_reminder_answer" },
     };
@@ -1354,15 +1386,38 @@ async function handleAgendaCreate(
   // ─── STEP: waiting_reminder_minutes ───
   // Usuário está informando com quanto tempo de antecedência quer o lembrete
   if (step === "waiting_reminder_minutes") {
+    const msgLowMin = message.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    const buttonMinMap: Record<string, number> = {
+      "button:advance_15min": 15,
+      "button:advance_30min": 30,
+      "button:advance_1h":    60,
+      "button:advance_2h":    120,
+    };
+    const btnMin = buttonMinMap[msgLowMin];
+    if (btnMin !== undefined) {
+      const recurrenceFromCtxMin2 = context._recurrence ? { type: context._recurrence as string, weekday: context._recurrence_weekday as number | undefined } : undefined;
+      const finalDataBtn2 = { ...partial, reminder_minutes: btnMin } as unknown as ExtractedEvent;
+      return await createEventAndConfirm(userId, phone, finalDataBtn2, recurrenceFromCtxMin2, language, userNickname, userTz);
+    }
     const minutes = parseMinutes(message);
     if (minutes !== null) {
       const recurrenceFromCtxMin = context._recurrence ? { type: context._recurrence as string, weekday: context._recurrence_weekday as number | undefined } : undefined;
       const finalData = { ...partial, reminder_minutes: minutes } as unknown as ExtractedEvent;
       return await createEventAndConfirm(userId, phone, finalData, recurrenceFromCtxMin, language, userNickname, userTz);
     }
-    // Não entendeu — pede de novo
+    // Não entendeu — reenvia botões
+    sendButtons(
+      phone,
+      "Com quanto tempo antes? ⏱️",
+      `Lembrete para: "${(partial as Record<string,unknown>).title ?? "evento"}"`,
+      [
+        { id: "advance_15min", text: "15 minutos" },
+        { id: "advance_30min", text: "30 minutos" },
+        { id: "advance_1h",    text: "1 hora" },
+      ]
+    ).catch(() => {});
     return {
-      response: "Não entendi. Com quanto tempo antes?\n\n_Ex: 15, 30, 1 hora, 2 horas — ou \"só na hora\"_ ⏱️",
+      response: "",
       pendingAction: "agenda_create",
       pendingContext: { partial, step: "waiting_reminder_minutes" },
     };
@@ -1423,8 +1478,17 @@ async function handleAgendaCreate(
     if (/^1$|marcar assim|deixa assim|pode marcar|cria assim|manter|sim|claro|pode/.test(m)) {
       // Se ainda precisa perguntar sobre lembrete
       if (context.reminder_pending) {
+        sendButtons(
+          phone,
+          "Quer que eu te lembre antes? ⏱️",
+          `Evento: "${(savedPartial as Record<string,unknown>).title ?? "evento"}"`,
+          [
+            { id: "advance_confirm_yes", text: "⏰ Sim, me avisa antes" },
+            { id: "advance_confirm_no",  text: "✅ Só na hora" },
+          ]
+        ).catch(() => {});
         return {
-          response: "Perfeito! Quer que eu te lembre deste evento? ⏱️\n\n_Ex: 15 min antes, 1 hora, só na hora ou não_",
+          response: "",
           pendingAction: "agenda_create",
           pendingContext: { partial: savedPartial, step: "waiting_reminder_answer" },
         };
@@ -1469,8 +1533,17 @@ async function handleAgendaCreate(
       }
 
       if (context.reminder_pending) {
+        sendButtons(
+          phone,
+          "Horário atualizado! Quer que eu te lembre? ⏱️",
+          `Evento: "${(newData as Record<string,unknown>).title ?? "evento"}"`,
+          [
+            { id: "advance_confirm_yes", text: "⏰ Sim, me avisa antes" },
+            { id: "advance_confirm_no",  text: "✅ Só na hora" },
+          ]
+        ).catch(() => {});
         return {
-          response: "Horário atualizado! Quer que eu te lembre deste evento? ⏱️\n\n_Ex: 15 min antes, 1 hora, só na hora ou não_",
+          response: "",
           pendingAction: "agenda_create",
           pendingContext: { partial: newData, step: "waiting_reminder_answer" },
         };
@@ -1544,8 +1617,17 @@ async function handleAgendaCreate(
 
   // Se a IA oferece lembrete (horário já existe, lembrete não discutido)
   if (extracted.needs_clarification && extracted.clarification_type === "reminder_offer") {
+    sendButtons(
+      phone,
+      "Quer que eu te lembre antes? ⏱️",
+      `Evento: "${extracted.title ?? "evento"}"`,
+      [
+        { id: "advance_confirm_yes", text: "⏰ Sim, me avisa antes" },
+        { id: "advance_confirm_no",  text: "✅ Só na hora" },
+      ]
+    ).catch(() => {});
     return {
-      response: extracted.needs_clarification,
+      response: "",
       pendingAction: "agenda_create",
       pendingContext: { partial: extracted, step: "waiting_reminder_answer", _recurrence: recurrence?.type, _recurrence_weekday: recurrence?.weekday },
     };
@@ -2011,8 +2093,33 @@ async function handleAgendaEdit(
     }, userTz);
   }
 
-  // ─── STEP: waiting_reminder_answer ───
+  // ─── STEP: waiting_reminder_answer (followup/edit) ───
   if (step === "waiting_reminder_answer") {
+    const msgLowFU = message.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    const fuBtnMap: Record<string, number | null> = {
+      "button:advance_15min": 15, "button:advance_30min": 30,
+      "button:advance_1h": 60,   "button:advance_confirm_no": 0,
+    };
+    if (fuBtnMap[msgLowFU] !== undefined) {
+      return await finalizeEdit(userId, phone, ctx, fuBtnMap[msgLowFU], userTz);
+    }
+    if (msgLowFU === "button:advance_confirm_yes" || isReminderAccept(message)) {
+      sendButtons(
+        phone,
+        "Com quanto tempo antes? ⏱️",
+        `Evento: "${(ctx as Record<string,unknown>).event_title ?? "evento"}"`,
+        [
+          { id: "advance_15min", text: "15 minutos" },
+          { id: "advance_30min", text: "30 minutos" },
+          { id: "advance_1h",    text: "1 hora" },
+        ]
+      ).catch(() => {});
+      return {
+        response: "",
+        pendingAction: "agenda_edit",
+        pendingContext: { ...ctx, step: "waiting_reminder_minutes" },
+      };
+    }
     if (isReminderAtTime(message)) {
       return await finalizeEdit(userId, phone, ctx, 0, userTz);
     }
@@ -2023,28 +2130,48 @@ async function handleAgendaEdit(
     if (minutesInAnswer !== null && message.match(/\d|hora|minuto|meia/)) {
       return await finalizeEdit(userId, phone, ctx, minutesInAnswer, userTz);
     }
-    if (isReminderAccept(message)) {
-      return {
-        response: "Com quanto tempo de antecedência? ⏱️\n\n_Ex: 15 min, 30 min, 1 hora — ou \"só na hora\"_",
-        pendingAction: "agenda_edit",
-        pendingContext: { ...ctx, step: "waiting_reminder_minutes" },
-      };
-    }
+    // Reenvia botões
+    sendButtons(
+      phone,
+      "Quer que eu te lembre antes? ⏱️",
+      `Evento: "${(ctx as Record<string,unknown>).event_title ?? "evento"}"`,
+      [
+        { id: "advance_confirm_yes", text: "⏰ Sim, me avisa antes" },
+        { id: "advance_confirm_no",  text: "✅ Só na hora" },
+      ]
+    ).catch(() => {});
     return {
-      response: "Quer que eu te lembre antes? Pode me dizer:\n• *30 minutos antes*\n• *1 hora antes*\n• *só na hora*\n• *não precisa*",
+      response: "",
       pendingAction: "agenda_edit",
       pendingContext: { ...ctx, step: "waiting_reminder_answer" },
     };
   }
 
-  // ─── STEP: waiting_reminder_minutes ───
+  // ─── STEP: waiting_reminder_minutes (followup/edit) ───
   if (step === "waiting_reminder_minutes") {
+    const msgLowMinFU = message.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    const fuMinMap: Record<string, number> = {
+      "button:advance_15min": 15, "button:advance_30min": 30,
+      "button:advance_1h": 60,   "button:advance_2h": 120,
+    };
+    const btnMinFU = fuMinMap[msgLowMinFU];
+    if (btnMinFU !== undefined) return await finalizeEdit(userId, phone, ctx, btnMinFU, userTz);
     const minutes = parseMinutes(message);
     if (minutes !== null) {
       return await finalizeEdit(userId, phone, ctx, minutes, userTz);
     }
+    sendButtons(
+      phone,
+      "Com quanto tempo antes? ⏱️",
+      `Evento: "${(ctx as Record<string,unknown>).event_title ?? "evento"}"`,
+      [
+        { id: "advance_15min", text: "15 minutos" },
+        { id: "advance_30min", text: "30 minutos" },
+        { id: "advance_1h",    text: "1 hora" },
+      ]
+    ).catch(() => {});
     return {
-      response: "Não entendi. Com quanto tempo antes?\n\n_Ex: 15, 30, 1 hora — ou \"só na hora\"_ ⏱️",
+      response: "",
       pendingAction: "agenda_edit",
       pendingContext: { ...ctx, step: "waiting_reminder_minutes" },
     };
@@ -2162,8 +2289,17 @@ async function offerReminderAfterEdit(
   // Se o evento tinha lembrete, pergunta se quer manter/alterar
   const hadReminder = (ctx.reminder_minutes as number | null) != null;
   if (hadReminder) {
+    sendButtons(
+      phone,
+      "Quer atualizar o lembrete? ⏱️",
+      `Evento: "${(ctx as Record<string,unknown>).event_title ?? "evento"}"`,
+      [
+        { id: "advance_confirm_yes", text: "⏰ Sim, me avisa antes" },
+        { id: "advance_confirm_no",  text: "✅ Só na hora" },
+      ]
+    ).catch(() => {});
     return {
-      response: `Quer atualizar o lembrete também?\n\n• *Sim* — me diga com quantos minutos de antecedência\n• *Só na hora* — te aviso na hora do evento\n• *Não precisa* — remove o lembrete`,
+      response: "",
       pendingAction: "agenda_edit",
       pendingContext: { ...ctx, step: "waiting_reminder_answer" },
     };
@@ -2440,7 +2576,8 @@ async function handleNotesSave(
     const suggestedTitle = ctx.suggestedTitle as string;
 
     const wantsReminder =
-      /^2$|^lembrete|^lembrar|^avisa|^aviso|^lembre|^quero lembrete|^criar lembrete/.test(m2);
+      /^2$|^lembrete|^lembrar|^avisa|^aviso|^lembre|^quero lembrete|^criar lembrete/.test(m2) ||
+      m2 === "button:note_reminder";
 
     if (wantsReminder) {
       // Guarda o conteúdo e pede o horário
@@ -2530,8 +2667,13 @@ async function handleNotesSave(
     const moreInfoQuestion = ctx.moreInfoQuestion as string | null;
     const originalMessage = ctx.originalMessage as string;
 
+    // Cancelar
+    if (m === "button:note_cancel" || /^(cancelar?|nao|nope|desistir|esquece)$/.test(m)) {
+      return { response: "Ok, descartado! Qualquer coisa é só me chamar. 😊" };
+    }
+
     // Usuário quer colocar na agenda
-    if (/^1$|^agenda$|^agendar|^marcar|^compromisso|^sim$|^quero agenda/.test(m)) {
+    if (/^1$|^agenda$|^agendar|^marcar|^compromisso|^sim$|^quero agenda/.test(m) || m === "button:note_agenda") {
       if (needsMoreInfo && moreInfoQuestion) {
         return {
           response: moreInfoQuestion,
@@ -2672,36 +2814,54 @@ async function handleNotesSave(
 
   // Se não tem referência de tempo e não parece evento → pergunta notas ou lembrete
   if (!hasTimeRef && !analysis.looksLikeEvent) {
-    const userName = userNickname ? `, ${userNickname}` : "";
+    const pendingCtx = {
+      step: "note_or_reminder_choice",
+      cleanContent: analysis.cleanContent,
+      suggestedTitle: analysis.suggestedTitle,
+      originalMessage: message,
+    };
+    // Envia botões interativos (fire-and-forget; resposta vazia para não duplicar sendText)
+    sendButtons(
+      phone,
+      "Salvar como...",
+      `"${analysis.cleanContent.slice(0, 80)}"`,
+      [
+        { id: "note_note",     text: "📝 Anotação" },
+        { id: "note_reminder", text: "🔔 Lembrete" },
+        { id: "note_cancel",   text: "❌ Cancelar" },
+      ]
+    ).catch(() => {});
     return {
-      response: `Entendido${userName}! Isso é para:\n\n📝 *1 — Anotações* — salvo para consultar depois\n🔔 *2 — Lembrete* — te aviso no horário que você quiser\n\n_Responda 1 ou 2_`,
+      response: "",
       pendingAction: "notes_save",
-      pendingContext: {
-        step: "note_or_reminder_choice",
-        cleanContent: analysis.cleanContent,
-        suggestedTitle: analysis.suggestedTitle,
-        originalMessage: message,
-      },
+      pendingContext: pendingCtx,
     };
   }
 
   // Se parece um evento → pergunta o que fazer
   if (analysis.looksLikeEvent) {
-    const eventHint = analysis.needsMoreInfo && analysis.moreInfoQuestion
-      ? `\n\n_Também posso te pedir mais detalhes como especialidade ou local._`
-      : "";
-
+    const pendingCtxEvent = {
+      step: "note_or_event_choice",
+      cleanContent: analysis.cleanContent,
+      suggestedTitle: analysis.suggestedTitle,
+      needsMoreInfo: analysis.needsMoreInfo,
+      moreInfoQuestion: analysis.moreInfoQuestion,
+      originalMessage: message,
+    };
+    sendButtons(
+      phone,
+      "Isso parece um compromisso! 📅",
+      `"${analysis.suggestedTitle || analysis.cleanContent.slice(0, 60)}"`,
+      [
+        { id: "note_agenda",  text: "📅 Adicionar à agenda" },
+        { id: "note_note",    text: "📝 Salvar como nota" },
+        { id: "note_cancel",  text: "❌ Cancelar" },
+      ]
+    ).catch(() => {});
     return {
-      response: `Isso parece um compromisso! 📅${eventHint}\n\nO que você prefere?\n1️⃣ *Colocar na agenda* — com data, hora e lembrete\n2️⃣ *Salvar como anotação* — só para consulta depois`,
+      response: "",
       pendingAction: "notes_save",
-      pendingContext: {
-        step: "note_or_event_choice",
-        cleanContent: analysis.cleanContent,
-        suggestedTitle: analysis.suggestedTitle,
-        needsMoreInfo: analysis.needsMoreInfo,
-        moreInfoQuestion: analysis.moreInfoQuestion,
-        originalMessage: message,
-      },
+      pendingContext: pendingCtxEvent,
     };
   }
 
@@ -2825,7 +2985,13 @@ serve(async (req) => {
   const replyTo = remoteJid;
 
   const messageData = data?.message as Record<string, unknown>;
+
+  // Detecta resposta de botao interativo (buttonsResponseMessage do Evolution API v2)
+  const buttonResp = messageData?.buttonsResponseMessage as Record<string, unknown> | undefined;
+  const buttonId = buttonResp?.selectedButtonId as string | undefined;
+
   const text =
+    (buttonId ? `BUTTON:${buttonId}` : null) ||
     (messageData?.conversation as string) ||
     (messageData?.extendedTextMessage as Record<string, unknown>)?.text as string;
 
@@ -3077,13 +3243,62 @@ async function handleReminderSet(
   const ctx = (session?.pending_context as Record<string, unknown>) ?? {};
   const step = (ctx.step as string) ?? null;
 
+  // ─── STEP: reminder_advance_confirm ───
+  // Usuário respondeu ao botão "Quer que eu te avise antes?"
+  if (step === "reminder_advance_confirm") {
+    const parsed = ctx.parsed as Record<string, unknown>;
+    const remindAt = new Date(parsed.remind_at as string);
+    const msgLow = message.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+
+    const wantsAdvance =
+      msgLow === "button:advance_confirm_yes" ||
+      /^(sim|quero|pode|s|yes|claro|ok|confirma|obrigad)/.test(msgLow);
+
+    if (wantsAdvance) {
+      // Envia botões de opções de tempo (fire-and-forget)
+      sendButtons(
+        phone,
+        "Com quanto tempo antes?",
+        `Vou te avisar antes de: "${parsed.title}"`,
+        [
+          { id: "advance_15min", text: "15 minutos" },
+          { id: "advance_30min", text: "30 minutos" },
+          { id: "advance_1h",    text: "1 hora" },
+        ]
+      ).catch(() => {});
+      return {
+        response: "",
+        pendingAction: "reminder_set",
+        pendingContext: { step: "reminder_advance", parsed },
+      };
+    }
+
+    // Não quer aviso antecipado → salva na hora exata
+    return await saveReminder(userId, phone, parsed, remindAt, 0, lang, userNickname, userTz);
+  }
+
+  // ─── STEP: reminder_advance ───
   // Usuário está respondendo com quanto tempo antes quer ser avisado
   if (step === "reminder_advance") {
     const parsed = ctx.parsed as Record<string, unknown>;
     const remindAt = new Date(parsed.remind_at as string);
+    const msgLow = message.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+
+    // Mapeamento de button IDs para minutos
+    const buttonAdvanceMap: Record<string, number> = {
+      "button:advance_15min": 15,
+      "button:advance_30min": 30,
+      "button:advance_1h":    60,
+      "button:advance_2h":    120,
+    };
+    if (buttonAdvanceMap[msgLow] !== undefined) {
+      const advMin = buttonAdvanceMap[msgLow];
+      const advancedTime = new Date(remindAt.getTime() - advMin * 60 * 1000);
+      return await saveReminder(userId, phone, parsed, advancedTime, advMin, lang, userNickname, userTz);
+    }
 
     // ── Detecta se usuário está especificando recorrência na resposta ──
-    const msgNorm = message.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    const msgNorm = msgLow;
     const recurrenceUpdate = detectRecurrenceFromText(msgNorm, remindAt);
     if (recurrenceUpdate) {
       const updatedParsed = {
@@ -3108,9 +3323,19 @@ async function handleReminderSet(
       const advancedTime = new Date(remindAt.getTime() - advanceMin * 60 * 1000);
       return await saveReminder(userId, phone, parsed, advancedTime, advanceMin, lang, userNickname, userTz);
     }
-    // Não entendeu
+    // Não entendeu → reenvia botões
+    sendButtons(
+      phone,
+      "Com quanto tempo antes?",
+      `Vou te avisar antes de: "${(parsed as Record<string, unknown>).title}"`,
+      [
+        { id: "advance_15min", text: "15 minutos" },
+        { id: "advance_30min", text: "30 minutos" },
+        { id: "advance_1h",    text: "1 hora" },
+      ]
+    ).catch(() => {});
     return {
-      response: "Não entendi. Com quanto tempo antes? Ex: *15 min*, *1 hora* — ou diga *só na hora*",
+      response: "",
       pendingAction: "reminder_set",
       pendingContext: ctx,
     };
@@ -3164,10 +3389,20 @@ async function handleReminderSet(
       timeZone: userTz,
       weekday: "long", day: "numeric", month: "long",
     });
+    // Pergunta via botões: Quer aviso antecipado?
+    sendButtons(
+      phone,
+      "Quer que eu te avise antes? ⏱️",
+      `Lembrete: "${parsed.title}" — ${dateStr} às ${timeStr}`,
+      [
+        { id: "advance_confirm_yes", text: "⏰ Sim, me avisa antes" },
+        { id: "advance_confirm_no",  text: "✅ Só na hora" },
+      ]
+    ).catch(() => {});
     return {
-      response: `Ok! Vou te lembrar sobre *${parsed.title}* em ${dateStr} às ${timeStr}.\n\nQuer que eu te avise com antecedência ou *só na hora*? ⏱️\n\n_Ex: 15 min antes, 1 hora antes, só na hora_`,
+      response: "",
       pendingAction: "reminder_set",
-      pendingContext: { step: "reminder_advance", parsed },
+      pendingContext: { step: "reminder_advance_confirm", parsed },
     };
   }
 
@@ -3860,10 +4095,13 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
     }
 
     // 7. Traduz resposta se necessário e envia
-    if (language !== "pt-BR") {
-      responseText = await translateIfNeeded(responseText, language);
+    // (responseText vazio indica que um botão interativo já foi enviado pelo handler)
+    if (responseText) {
+      if (language !== "pt-BR") {
+        responseText = await translateIfNeeded(responseText, language);
+      }
+      await sendText(sendPhone || replyTo, responseText);
     }
-    await sendText(sendPhone || replyTo, responseText);
 
     // 8. Atualiza sessão
     await supabase.from("whatsapp_sessions").upsert(
@@ -3971,8 +4209,13 @@ async function saveConversation(
 
   if (!conv) return;
 
+  // Formata texto de botão para log legível
+  const displayUserText = userText.startsWith("BUTTON:")
+    ? `[Botão: ${userText.replace("BUTTON:", "").replace(/_/g, " ")}]`
+    : userText;
+
   await supabase.from("messages").insert([
-    { conversation_id: conv.id, role: "user", content: userText, intent },
+    { conversation_id: conv.id, role: "user", content: displayUserText, intent },
     { conversation_id: conv.id, role: "assistant", content: assistantText },
   ]);
 

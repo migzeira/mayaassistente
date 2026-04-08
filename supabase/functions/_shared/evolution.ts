@@ -48,6 +48,44 @@ export async function sendText(to: string, text: string): Promise<void> {
   });
 }
 
+/**
+ * Envia mensagem com botoes interativos via Evolution API.
+ * Maximo 3 botoes (limite do WhatsApp). Botoes do tipo "reply" retornam
+ * buttonsResponseMessage.selectedButtonId no webhook.
+ */
+export async function sendButtons(
+  to: string,
+  title: string,
+  description: string,
+  buttons: Array<{ id: string; text: string }>,
+  footer = "Maya"
+): Promise<void> {
+  let number: string;
+
+  if (to.endsWith("@lid")) {
+    const resolved = await resolveLidToPhone(to);
+    number = resolved ? normalizePhone(resolved) : to;
+  } else if (to.includes("@")) {
+    number = to;
+  } else {
+    number = normalizePhone(to);
+  }
+
+  const body = {
+    number,
+    title,
+    description,
+    footer,
+    buttons: buttons.slice(0, 3).map(b => ({
+      type: "reply",
+      displayText: b.text,
+      id: b.id,
+    })),
+  };
+
+  await evolutionPost(`/message/sendButtons/${INSTANCE}`, body);
+}
+
 /** Envia imagem via Evolution API (base64 ou URL) */
 export async function sendImage(
   to: string,
