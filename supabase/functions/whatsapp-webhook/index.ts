@@ -2388,10 +2388,15 @@ serve(async (req) => {
         await sendText(replyTo, "⚠️ Não entendi o áudio. Pode repetir por texto?");
         return new Response("OK");
       }
-      const debugResult = await processMessage(replyTo, `[🎤 Áudio transcrito] ${transcription}`, lid, messageId, pushName, transcription);
+      // Envia texto transcrito limpo (sem prefixo) para processamento de intents.
+      // O prefixo [🎤 Áudio transcrito] quebrava regex com ^ (ex: notas, saudação).
+      const debugResult = await processMessage(replyTo, transcription, lid, messageId, pushName, transcription);
       return new Response(JSON.stringify({ ok: true, transcription, debug: debugResult }), {
         headers: { "Content-Type": "application/json" },
       });
+    } else {
+      console.error("[audio] Failed to download media from Evolution API");
+      await sendText(replyTo, "⚠️ Não consegui baixar o áudio. Pode tentar enviar de novo?");
     }
     return new Response("OK");
   }
