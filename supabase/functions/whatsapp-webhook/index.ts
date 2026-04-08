@@ -319,20 +319,21 @@ function classifyIntent(msg: string): Intent {
   )
     return "notes_save";
 
-  // Snooze de lembrete — adiar um lembrete recente (em português natural)
+  // Snooze de lembrete — adiar um lembrete que JÁ foi disparado
+  // IMPORTANTE: só ativa com "de novo", "novamente", "isso", "adiar" etc.
+  // NÃO ativa com "me lembra daqui X sobre Y" (isso é reminder_set)
   if (
     /^snooze\b/.test(m) ||
     m === "adiar" || m === "adia" ||
     /^adiar?\s+\d+\s*(min|minuto|hora)/.test(m) ||
-    /me lembra (isso |de novo |novamente )?(daqui|em) \d/.test(m) ||
     /me lembra (de novo|novamente) (daqui|em)/.test(m) ||
+    /me lembra isso (daqui|em) \d/.test(m) ||
     /me avisa (de novo|novamente) (daqui|em) \d/.test(m) ||
     /manda (de novo|novamente) (daqui|em) \d/.test(m) ||
     /repete (daqui|em) \d/.test(m) ||
     /avisa (de novo|novamente) (daqui|em) \d/.test(m) ||
     /(de novo|novamente) em \d/.test(m) ||
-    /daqui a pouco de novo/.test(m) ||
-    /me lembra (daqui|em) \d/.test(m)
+    /daqui a pouco de novo/.test(m)
   ) return "reminder_snooze";
 
   // Listar lembretes
