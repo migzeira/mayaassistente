@@ -1,4 +1,4 @@
-import { Home, Wallet, CalendarDays, StickyNote, MessageSquare, Link2, Settings, User, LogOut, Shield, Bell, X } from "lucide-react";
+import { Home, Wallet, CalendarDays, StickyNote, MessageSquare, Link2, Settings, User, LogOut, Shield, Bell, X, Zap } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import logoEscrita from "@/assets/logo_escrita.png";
 import logoIcon from "@/assets/logo_icon.png";
@@ -24,6 +24,7 @@ const menuItems = [
   { title: "Agenda", url: "/dashboard/agenda", icon: CalendarDays },
   { title: "Lembretes", url: "/dashboard/lembretes", icon: Bell },
   { title: "Anotações", url: "/dashboard/anotacoes", icon: StickyNote },
+  { title: "Hábitos", url: "/dashboard/habitos", icon: Zap },
   { title: "Conversas", url: "/dashboard/conversas", icon: MessageSquare },
   { title: "Integrações", url: "/dashboard/integracoes", icon: Link2 },
   { title: "Config. do Agente", url: "/dashboard/agente", icon: Settings },

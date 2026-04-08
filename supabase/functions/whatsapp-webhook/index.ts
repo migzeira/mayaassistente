@@ -116,6 +116,7 @@ function getModuleDisabledMsg(
     budget_set:        "finance",
     budget_query:      "finance",
     recurring_create:  "finance",
+    // habit_create e habit_checkin nao mapeados = sempre disponivel
     agenda_create:   "agenda",
     agenda_query:    "agenda",
     agenda_lookup:   "agenda",
@@ -260,6 +261,8 @@ type Intent =
   | "budget_set"
   | "budget_query"
   | "recurring_create"
+  | "habit_create"
+  | "habit_checkin"
   | "agenda_create"
   | "agenda_query"
   | "agenda_lookup"
@@ -297,6 +300,18 @@ function classifyIntent(msg: string): Intent {
     /como.{0,10}(estou|esta|tá|ta).{0,10}orcamento|meu orcamento|minha meta|status.{0,10}orcamento|orcamento de|meta de (gasto|alimenta|transport|morad|saude|lazer|educa|trabalh)/.test(m)
   )
     return "budget_query";
+
+  // Criar habito
+  if (
+    /(criar|quero|adicionar|comecar|iniciar|novo).{0,15}(habito|rotina|costume)|habito de .{3,}|rotina de .{3,}/.test(m)
+  )
+    return "habit_create";
+
+  // Check-in de habito (respostas curtas apos lembrete)
+  if (
+    /^(fiz|feito|pronto|concluido|completo|done|check|✅|✔️|👍|sim fiz|fiz sim|ja fiz)\s*[!.]?$/.test(m)
+  )
+    return "habit_checkin";
 
   // Transação recorrente (antes de finance_record)
   if (
@@ -439,6 +454,141 @@ function applyTemplate(template: string, vars: Record<string, string>): string {
   // Converte \n literal (vindo do banco) em newline real
   result = result.replace(/\\n/g, "\n");
   return result;
+}
+
+// ─────────────────────────────────────────────
+// HABIT HANDLERS
+// ─────────────────────────────────────────────
+
+async function handleHabitCreate(userId: string, phone: string, message: string): Promise<string> {
+  const prompt = `Extraia de uma frase em português os dados para criar um hábito diário.
+Retorne JSON puro: {"name":"nome curto","description":"descricao","reminder_time":"HH:MM","icon":"emoji"}
+
+Exemplos:
+- "quero criar habito de beber agua a cada 2h" → {"name":"Beber agua","description":"Beber agua regularmente","reminder_time":"08:00","icon":"💧"}
+- "habito de exercicio todo dia as 7h" → {"name":"Exercicio","description":"Treino diario","reminder_time":"07:00","icon":"🏃"}
+- "criar rotina de leitura" → {"name":"Leitura","description":"Ler todos os dias","reminder_time":"21:00","icon":"📚"}
+
+Frase: "${message}"`;
+
+  const aiResponse = await chat(prompt);
+  let parsed: any;
+  try {
+    const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("No JSON");
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch {
+    return "Nao entendi. Exemplo: *quero habito de exercicio todo dia as 7h*";
+  }
+
+  if (!parsed.name) return "Nao consegui identificar o habito. Exemplo: *habito de beber agua*";
+
+  const { error, data } = await supabase
+    .from("habits")
+    .insert({
+      user_id: userId,
+      name: parsed.name,
+      description: parsed.description || null,
+      reminder_times: JSON.stringify([parsed.reminder_time || "08:00"]),
+      target_days: JSON.stringify([0, 1, 2, 3, 4, 5, 6]),
+      icon: parsed.icon || "🎯",
+      color: "#6366f1",
+      is_active: true,
+      current_streak: 0,
+      best_streak: 0,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("Habit create error:", error);
+    return "Erro ao criar habito. Tente novamente.";
+  }
+
+  // Cria lembrete recorrente diario para o habito
+  const now = new Date();
+  const [hours, mins] = (parsed.reminder_time || "08:00").split(":").map(Number);
+  const sendAt = new Date(now);
+  sendAt.setHours(hours, mins, 0, 0);
+  if (sendAt <= now) sendAt.setDate(sendAt.getDate() + 1);
+
+  await supabase.from("reminders").insert({
+    user_id: userId,
+    whatsapp_number: phone,
+    title: `Habito: ${parsed.name}`,
+    message: `${parsed.icon || "🎯"} Hora do habito: *${parsed.name}*!\n\nQuando terminar, responda *feito* para registrar.`,
+    send_at: sendAt.toISOString(),
+    recurrence: "daily",
+    source: "habit",
+    status: "pending",
+  });
+
+  return `✅ *Habito criado!*\n\n${parsed.icon || "🎯"} *${parsed.name}*\n${parsed.description ? `📝 ${parsed.description}\n` : ""}⏰ Lembrete diario as ${parsed.reminder_time || "08:00"}\n\nQuando completar, responda *feito* e eu registro seu progresso!`;
+}
+
+async function handleHabitCheckin(userId: string, message: string): Promise<string> {
+  const today = new Date().toISOString().split("T")[0];
+
+  // Busca habitos ativos do usuario
+  const { data: habits } = await supabase
+    .from("habits")
+    .select("id, name, icon, current_streak, best_streak")
+    .eq("user_id", userId)
+    .eq("is_active", true);
+
+  if (!habits?.length) {
+    return "Voce nao tem habitos ativos. Crie um: *quero habito de exercicio todo dia as 7h*";
+  }
+
+  // Verifica quais ainda nao foram feitos hoje
+  const { data: todayLogs } = await supabase
+    .from("habit_logs")
+    .select("habit_id")
+    .eq("user_id", userId)
+    .eq("logged_date", today);
+
+  const doneIds = new Set((todayLogs ?? []).map((l: any) => l.habit_id));
+  const pending = habits.filter((h: any) => !doneIds.has(h.id));
+
+  if (pending.length === 0) {
+    return "🎉 Todos os habitos de hoje ja foram registrados! Continue assim!";
+  }
+
+  // Registra o primeiro habito pendente
+  const habit = pending[0] as any;
+  const { error } = await supabase.from("habit_logs").insert({
+    habit_id: habit.id,
+    user_id: userId,
+    logged_date: today,
+  });
+
+  if (error) {
+    if (error.code === "23505") return "Ja registrado hoje! 👍";
+    console.error("Habit checkin error:", error);
+    return "Erro ao registrar. Tente novamente.";
+  }
+
+  // Atualiza streak
+  const newStreak = (habit.current_streak || 0) + 1;
+  const bestStreak = Math.max(newStreak, habit.best_streak || 0);
+  await supabase.from("habits").update({
+    current_streak: newStreak,
+    best_streak: bestStreak,
+  }).eq("id", habit.id);
+
+  // Mensagem motivacional baseada no streak
+  let motivation = "";
+  if (newStreak === 1) motivation = "\n\n💪 Primeiro dia! O começo de algo grande.";
+  else if (newStreak === 7) motivation = "\n\n🔥 *1 semana seguida!* Incrivel!";
+  else if (newStreak === 30) motivation = "\n\n🏆 *30 dias!* Voce e uma maquina!";
+  else if (newStreak === 100) motivation = "\n\n👑 *100 DIAS!* Lendario!";
+  else if (newStreak % 10 === 0) motivation = `\n\n🎯 *${newStreak} dias seguidos!* Impressionante!`;
+  else if (newStreak >= 3) motivation = `\n\n🔥 ${newStreak} dias seguidos!`;
+
+  const remaining = pending.length - 1;
+  const remainingText = remaining > 0 ? `\n\n📋 Ainda ${remaining === 1 ? "falta 1 habito" : `faltam ${remaining} habitos`} hoje.` : "\n\n🎉 *Todos os habitos de hoje concluidos!*";
+
+  return `✅ *${habit.icon} ${habit.name}* — registrado!${motivation}${remainingText}`;
 }
 
 // ─────────────────────────────────────────────
@@ -3313,6 +3463,8 @@ function getHumanizedError(intent: string): string {
     case "budget_set":       return "⚠️ Não consegui definir o orçamento. Ex: _quero gastar no máximo 2000 em alimentação_";
     case "budget_query":     return "⚠️ Não consegui consultar seus orçamentos. Tente de novo.";
     case "recurring_create": return "⚠️ Não consegui criar a recorrente. Ex: _aluguel 1500 todo dia 5_";
+    case "habit_create":     return "⚠️ Não consegui criar o hábito. Ex: _quero hábito de exercício todo dia às 7h_";
+    case "habit_checkin":    return "⚠️ Não consegui registrar. Tente enviar _feito_ quando completar um hábito.";
     case "finance_report":  return "⚠️ Não consegui gerar o relatório financeiro agora. Tente de novo em instantes.";
     default:                return "⚠️ Ops, algo deu errado por aqui. Pode tentar de novo? 🙏";
   }
@@ -3634,6 +3786,10 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
       responseText = await handleBudgetQuery(profile.id, text);
     } else if (intent === "recurring_create") {
       responseText = await handleRecurringCreate(profile.id, text);
+    } else if (intent === "habit_create") {
+      responseText = await handleHabitCreate(profile.id, sendPhone || replyTo, text);
+    } else if (intent === "habit_checkin") {
+      responseText = await handleHabitCheckin(profile.id, text);
     } else if (intent === "finance_record") {
       responseText = await handleFinanceRecord(profile.id, sendPhone || replyTo, text, config);
     } else if (intent === "finance_report") {

@@ -50,6 +50,15 @@ const QUICK_ACTIONS = [
     border: "border-amber-500/20",
   },
   {
+    icon: Zap,
+    label: "Habitos",
+    desc: "Rastrear sua rotina",
+    to: "/dashboard/habitos",
+    color: "text-rose-400",
+    bg: "bg-rose-500/10",
+    border: "border-rose-500/20",
+  },
+  {
     icon: Settings,
     label: "Configurar Agente",
     desc: "Personalizar a Maya",
