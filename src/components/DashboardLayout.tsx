@@ -1,11 +1,10 @@
-import { Outlet, useNavigation } from "react-router-dom";
+import { Outlet } from "react-router-dom";
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { OnboardingBanner } from "@/components/OnboardingBanner";
 import { Button } from "@/components/ui/button";
 import { Menu, X } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
-import logoIcon from "@/assets/logo_icon.png";
 
 function DashboardHeader() {
   const { toggleSidebar, openMobile } = useSidebar();
@@ -44,31 +43,6 @@ function DashboardHeader() {
   );
 }
 
-function DashboardContent() {
-  const navigation = useNavigation();
-  const isNavigating = navigation.state === "loading";
-
-  return (
-    <>
-      <OnboardingBanner />
-      {isNavigating ? (
-        <div className="flex-1 flex items-center justify-center">
-          <img
-            src={logoIcon}
-            alt="Carregando..."
-            className="w-12 h-12 animate-spin"
-            style={{ animationDuration: "1.2s" }}
-          />
-        </div>
-      ) : (
-        <main className="flex-1 p-4 md:p-6 overflow-auto">
-          <Outlet />
-        </main>
-      )}
-    </>
-  );
-}
-
 export default function DashboardLayout() {
   return (
     <SidebarProvider>
@@ -76,7 +50,10 @@ export default function DashboardLayout() {
         <AppSidebar />
         <div className="flex-1 flex flex-col min-w-0">
           <DashboardHeader />
-          <DashboardContent />
+          <OnboardingBanner />
+          <main className="flex-1 p-4 md:p-6 overflow-auto">
+            <Outlet />
+          </main>
         </div>
       </div>
     </SidebarProvider>
