@@ -356,12 +356,19 @@ function classifyIntent(msg: string): Intent {
     /(lembrete\s+d[eo]\s+.+\s+para?\s+\d)/.test(m)
   ) return "reminder_edit";
 
-  // Lembrete simples — exige forma imperativa (não pega perguntas sobre a Maya)
-  // Evita falso positivo em "você não vai me lembrar?", "ia me lembrar", etc.
+  // Lembrete simples — cobre formas imperativas, subjuntivo e indiretas
   if (
-    /^me lembra\b|^me avisa\b|^me notifica\b|^quero um lembrete|^cria(r)? (um )?lembrete|^salva (um )?lembrete|^adiciona (um )?lembrete|^lembrete:/.test(m) ||
-    /\bme lembra (de|que|do|da|às|as|amanha|hoje|semana|todo|toda|dia \d)\b/.test(m) ||
-    /\bme avisa (às|as|quando|amanha|hoje|dia \d)\b/.test(m)
+    // Formas diretas: "me lembra", "me lembre", "me avisa", etc.
+    /^me lembra\b|^me lembre\b|^me avisa\b|^me notifica\b/.test(m) ||
+    // Formas de criação explícita
+    /^quero um lembrete|^cria(r)? (um )?lembrete|^salva (um )?lembrete|^adiciona (um )?lembrete|^lembrete:/.test(m) ||
+    // "me lembra/lembre" em qualquer posição com referência de tempo/assunto
+    /\bme lembra (de|que|do|da|às|as|amanha|hoje|semana|todo|toda|daqui|em \d|dia \d|sobre)\b/.test(m) ||
+    /\bme lembre (de|que|do|da|às|as|amanha|hoje|semana|todo|toda|daqui|em \d|dia \d|sobre)\b/.test(m) ||
+    /\bme avisa (às|as|quando|amanha|hoje|dia \d|daqui)\b/.test(m) ||
+    // Formas indiretas: "voce me lembra", "quero que voce me lembra/lembre"
+    /\b(voce|você) me (lembra|lembre)\b/.test(m) ||
+    /(quero que|pode|preciso que).*(me lembra|me lembre|me avisa)\b/.test(m)
   ) return "reminder_set";
 
   // Buscar evento específico
@@ -2546,7 +2553,13 @@ async function handleReminderSet(
   const mentionedAdvance = /antes|antecedência|antecipado|minutos? antes|horas? antes/.test(msgLower);
   const atTimeNow = isReminderAtTime(msgLower);
 
-  if (!mentionedAdvance && !atTimeNow && parsed.recurrence === "none") {
+  // Pergunta antecedência só se: sem recorrência, sem "na hora" explícito,
+  // sem "antes" na mensagem, E o lembrete é para daqui mais de 45 minutos
+  // (não faz sentido perguntar antecedência de "daqui 5 minutos")
+  const minutesUntilReminder = (remindAt.getTime() - Date.now()) / 60000;
+  const isSoonReminder = minutesUntilReminder < 45;
+
+  if (!mentionedAdvance && !atTimeNow && !isSoonReminder && parsed.recurrence === "none") {
     const locale = langToLocale(lang);
     const timeStr = remindAt.toLocaleTimeString(locale, {
       timeZone: userTz,
