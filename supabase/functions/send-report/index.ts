@@ -8,7 +8,8 @@
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sendText } from "../_shared/evolution.ts";
+import { sendText, sendImage } from "../_shared/evolution.ts";
+import { generateExpenseChartBase64 } from "../_shared/chart.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -118,6 +119,23 @@ async function sendReports(startDate: string, endDate: string, periodLabel: stri
       msg += `\n📱 Ver detalhes no app MayaChat`;
 
       const phone = user.phone_number.replace(/\D/g, "");
+
+      // Envia grafico antes do texto (se houver gastos)
+      if (totalExpense > 0) {
+        try {
+          const chartBase64 = await generateExpenseChartBase64({
+            byCategory,
+            periodLabel,
+            totalExpense,
+          });
+          if (chartBase64) {
+            await sendImage(phone, chartBase64, "");
+          }
+        } catch (chartErr) {
+          console.error(`Chart error for ${user.id}:`, chartErr);
+        }
+      }
+
       await sendText(phone, msg);
     } catch (e) {
       console.error(`Error sending report to ${user.id}:`, e);

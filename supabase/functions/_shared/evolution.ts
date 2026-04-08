@@ -55,10 +55,30 @@ export async function sendImage(
   caption: string,
   isUrl = false
 ): Promise<void> {
-  const number = normalizePhone(to);
-  const body = isUrl
-    ? { number, mediatype: "image", mimetype: "image/png", caption, media }
-    : { number, mediatype: "image", mimetype: "image/png", caption, media };
+  let number: string;
+
+  if (to.endsWith("@lid")) {
+    const resolved = await resolveLidToPhone(to);
+    number = resolved ? normalizePhone(resolved) : to;
+  } else if (to.includes("@")) {
+    number = to;
+  } else {
+    number = normalizePhone(to);
+  }
+
+  const body: Record<string, unknown> = {
+    number,
+    mediatype: "image",
+    mimetype: "image/png",
+    caption,
+  };
+
+  if (isUrl) {
+    body.media = media;
+  } else {
+    body.media = `data:image/png;base64,${media}`;
+  }
+
   await evolutionPost(`/message/sendMedia/${INSTANCE}`, body);
 }
 

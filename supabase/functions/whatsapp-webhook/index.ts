@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sendText, extractPhone, downloadMediaBase64, resolveLidToPhone } from "../_shared/evolution.ts";
+import { sendText, sendImage, extractPhone, downloadMediaBase64, resolveLidToPhone } from "../_shared/evolution.ts";
+import { generateExpenseChartBase64 } from "../_shared/chart.ts";
 import { syncGoogleCalendar, syncGoogleSheets, syncNotion } from "../_shared/integrations.ts";
 import {
   chat,
@@ -520,7 +521,7 @@ function detectCategory(m: string): string | null {
 async function handleFinanceReport(
   userId: string,
   message: string
-): Promise<string> {
+): Promise<{ text: string; chartBase64: string | null }> {
   const m = message
     .toLowerCase()
     .normalize("NFD")
@@ -581,9 +582,9 @@ async function handleFinanceReport(
         return `📊 Nenhum gasto registrado para *${periodLabel}* ainda.`;
       }
       const catList = cats.map((c) => `${catEmojis[c] ?? "📌"} ${c}`).join(", ");
-      return `📊 Não encontrei gastos com *${filterCategory}* em *${periodLabel}*.\n\nCategorias que você tem registros: ${catList}`;
+      return { text: `📊 Não encontrei gastos com *${filterCategory}* em *${periodLabel}*.\n\nCategorias que você tem registros: ${catList}`, chartBase64: null };
     }
-    return `📊 Nenhum registro encontrado para *${periodLabel}*.`;
+    return { text: `📊 Nenhum registro encontrado para *${periodLabel}*.`, chartBase64: null };
   }
 
   // Relatório de categoria específica
@@ -598,7 +599,7 @@ async function handleFinanceReport(
     r += lines.join("\n");
     if (transactions.length > 5) r += `\n_...e mais ${transactions.length - 5} registro(s)_`;
     r += `\n\n💸 *Total: R$ ${total.toFixed(2).replace(".", ",")}*`;
-    return r;
+    return { text: r, chartBase64: null };
   }
 
   const expenses = transactions.filter((t) => t.type === "expense");
@@ -647,9 +648,21 @@ async function handleFinanceReport(
     report += `\n📂 *Por categoria:*\n${catLines}`;
   }
 
-  report += `\n\n📱 Ver gráficos completos no app Minha Maya`;
+  report += `\n\n📱 Ver detalhes completos no app Minha Maya`;
 
-  return report;
+  // Gera grafico doughnut (nao-bloqueante: se falhar, envia so texto)
+  let chartBase64: string | null = null;
+  try {
+    chartBase64 = await generateExpenseChartBase64({
+      byCategory,
+      periodLabel,
+      totalExpense,
+    });
+  } catch (err) {
+    console.error("Chart generation failed:", err);
+  }
+
+  return { text: report, chartBase64 };
 }
 
 // Mapa de cores por tipo de evento
@@ -3297,7 +3310,17 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
     } else if (intent === "finance_record") {
       responseText = await handleFinanceRecord(profile.id, replyTo, text, config);
     } else if (intent === "finance_report") {
-      responseText = await handleFinanceReport(profile.id, text);
+      const reportResult = await handleFinanceReport(profile.id, text);
+      responseText = reportResult.text;
+      // Envia grafico antes do texto (se disponivel)
+      if (reportResult.chartBase64) {
+        try {
+          await sendImage(sendPhone || replyTo, reportResult.chartBase64, "");
+        } catch (chartErr) {
+          console.error("Failed to send chart image:", chartErr);
+          // Nao-fatal: texto sera enviado normalmente abaixo
+        }
+      }
     } else if (intent === "agenda_create") {
       const result = await handleAgendaCreate(profile.id, sendPhone || replyTo, text, session, language, userNickname, userTz);
       responseText = result.response;
