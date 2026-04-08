@@ -5,6 +5,7 @@ import {
   MessageCircle, Check, ArrowRight,
   Star, Shield, Sparkles, Mic, Camera, Lock, RefreshCw,
   ChevronDown, BarChart3, FileText, Table2, Zap, CalendarDays,
+  Menu, X,
 } from "lucide-react";
 import logoEscrita from "@/assets/logo_escrita.png";
 import logoChats from "@/assets/logo_chats.png";
@@ -677,6 +678,7 @@ function PricingSection() {
 ───────────────────────────────────────────────────────────────────────────── */
 export default function Index() {
   const [scrolled, setScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", fn, { passive: true });
@@ -689,10 +691,7 @@ export default function Index() {
 
       {/* ══ ANNOUNCEMENT BAR ══════════════════════════════════════════════ */}
       <div className="relative z-50 bg-gradient-to-r from-violet-600/30 to-purple-600/30 border-b border-violet-500/20 py-2 text-center text-[12px]">
-        <span className="text-violet-200">✨ Menos de R$1 por dia para ter uma assistente pessoal 24h</span>{" "}
-        <a href="#planos" className="text-white font-semibold underline underline-offset-2 hover:text-violet-200 transition-colors">
-          Assinar agora
-        </a>
+        <span className="text-violet-200">Menos de R$1 por dia para ter uma assistente pessoal 24h</span>
       </div>
 
       {/* ══ NAVBAR ════════════════════════════════════════════════════════ */}
@@ -709,16 +708,36 @@ export default function Index() {
               </a>
             ))}
           </nav>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" className="hidden sm:flex text-gray-300 hover:text-white hover:bg-white/8" asChild>
+          <div className="hidden sm:flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="text-gray-300 hover:text-white hover:bg-white/8" asChild>
               <Link to="/login">Login</Link>
             </Button>
             <Button size="sm" asChild
               className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white rounded-lg shadow-lg shadow-violet-500/25 hover:-translate-y-px transition-all duration-200">
-              <a href="#planos"><span className="sm:hidden">Assinar</span><span className="hidden sm:inline">Assinar agora</span></a>
+              <a href="#planos">Assinar agora</a>
             </Button>
           </div>
+          {/* Mobile hamburger */}
+          <button
+            className="sm:hidden flex items-center justify-center w-10 h-10 rounded-lg hover:bg-white/8 transition-colors"
+            onClick={() => setMobileMenuOpen(o => !o)}
+            aria-label="Menu"
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5 text-white" /> : <Menu className="w-5 h-5 text-white" />}
+          </button>
         </div>
+        {/* Mobile menu dropdown */}
+        {mobileMenuOpen && (
+          <div className="sm:hidden absolute top-full left-0 right-0 bg-[#03030a]/95 backdrop-blur-xl border-b border-white/[0.06] px-4 py-4 space-y-2 animate-slide-up-fade">
+            <Button variant="ghost" size="sm" className="w-full justify-center text-gray-300 hover:text-white hover:bg-white/8" asChild>
+              <Link to="/login" onClick={() => setMobileMenuOpen(false)}>Login</Link>
+            </Button>
+            <Button size="sm" asChild
+              className="w-full justify-center bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white rounded-lg shadow-lg shadow-violet-500/25">
+              <a href="#planos" onClick={() => setMobileMenuOpen(false)}>Assinar agora</a>
+            </Button>
+          </div>
+        )}
       </header>
 
       {/* ══ HERO ══════════════════════════════════════════════════════════ */}
@@ -741,7 +760,7 @@ export default function Index() {
             </AnimateIn>
             <AnimateIn delay={160}>
               <p className="mt-5 text-[17px] text-gray-400 leading-relaxed max-w-xl mx-auto">
-                A Minha Maya cuida das suas finanças, agenda e lembretes por você. Só manda uma mensagem no WhatsApp.
+                A Maya organiza suas finanças, gerencia sua agenda e te lembra de tudo o que importa. Tudo isso direto pelo WhatsApp.
               </p>
             </AnimateIn>
             <AnimateIn delay={240}>
@@ -857,7 +876,7 @@ export default function Index() {
           <AnimateIn from="right" className="order-1 lg:order-2">
             <div className="space-y-6">
               <h2 className="text-[38px] font-extrabold tracking-tight leading-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                Nunca mais esquecer<br /><span className="text-amber-400">o que importa</span>
+                Você nunca mais esquecer<br /><span className="text-amber-400">de nada importante</span>
               </h2>
               <p className="text-gray-400 leading-relaxed">
                 Fala com a Maya como falaria com alguém de confiança: <em className="text-white not-italic font-medium">"me lembra dia 10 de pagar a internet"</em>. Ela cria, repete todo mês e te avisa na hora certa.
@@ -976,7 +995,7 @@ export default function Index() {
           <AnimateIn from="right" className="order-1 lg:order-2">
             <div className="space-y-6">
               <h2 className="text-[38px] font-extrabold tracking-tight leading-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                Tudo organizado<br /><span className="text-indigo-400">sem você ter feito nada</span>
+                Tudo organizado,<br /><span className="text-indigo-400">só falando com a Maya pelo Whatsapp</span>
               </h2>
               <p className="text-gray-400 leading-relaxed">
                 Cada mensagem que você manda no WhatsApp vira dado organizado no seu painel. Você fala, ela registra, o dashboard atualiza sozinho.
@@ -1257,16 +1276,6 @@ export default function Index() {
         </div>
       </section>
 
-      {/* ══ MOBILE STICKY CTA ═══════════════════════════════════════════ */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-[#03030a]/95 backdrop-blur-xl border-t border-white/[0.08] px-4 py-3 safe-area-bottom">
-        <a
-          href="#planos"
-          className="flex items-center justify-center gap-2 w-full h-12 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white font-bold text-[15px] shadow-lg shadow-violet-500/30 active:scale-[0.98] transition-transform"
-        >
-          Assinar por R$29,90/mês
-          <ArrowRight className="w-4 h-4" />
-        </a>
-      </div>
 
       {/* ══ FOOTER ═══════════════════════════════════════════════════════ */}
       <footer className="border-t border-white/[0.06] py-12 px-4">

@@ -17,8 +17,10 @@ export type Database = {
       agent_configs: {
         Row: {
           agent_name: string
+          briefing_hour: number | null
           created_at: string
           custom_instructions: string | null
+          daily_briefing_enabled: boolean | null
           greeting_message: string | null
           id: string
           is_active: boolean
@@ -42,8 +44,10 @@ export type Database = {
         }
         Insert: {
           agent_name?: string
+          briefing_hour?: number | null
           created_at?: string
           custom_instructions?: string | null
+          daily_briefing_enabled?: boolean | null
           greeting_message?: string | null
           id?: string
           is_active?: boolean
@@ -67,8 +71,10 @@ export type Database = {
         }
         Update: {
           agent_name?: string
+          briefing_hour?: number | null
           created_at?: string
           custom_instructions?: string | null
+          daily_briefing_enabled?: boolean | null
           greeting_message?: string | null
           id?: string
           is_active?: boolean
@@ -205,6 +211,7 @@ export type Database = {
           message: string
           metadata: Json | null
           phone_number: string | null
+          severity: string
           stack: string | null
           user_id: string | null
         }
@@ -215,6 +222,7 @@ export type Database = {
           message: string
           metadata?: Json | null
           phone_number?: string | null
+          severity?: string
           stack?: string | null
           user_id?: string | null
         }
@@ -225,6 +233,7 @@ export type Database = {
           message?: string
           metadata?: Json | null
           phone_number?: string | null
+          severity?: string
           stack?: string | null
           user_id?: string | null
         }
@@ -240,12 +249,19 @@ export type Database = {
       }
       events: {
         Row: {
+          color: string | null
           created_at: string
           description: string | null
+          end_time: string | null
           event_date: string
           event_time: string | null
+          event_type: string | null
           google_event_id: string | null
           id: string
+          location: string | null
+          needs_followup: boolean | null
+          priority: string | null
+          recurrence_parent_id: string | null
           reminder: boolean
           reminder_minutes_before: number | null
           source: string
@@ -254,12 +270,19 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          color?: string | null
           created_at?: string
           description?: string | null
+          end_time?: string | null
           event_date: string
           event_time?: string | null
+          event_type?: string | null
           google_event_id?: string | null
           id?: string
+          location?: string | null
+          needs_followup?: boolean | null
+          priority?: string | null
+          recurrence_parent_id?: string | null
           reminder?: boolean
           reminder_minutes_before?: number | null
           source?: string
@@ -268,12 +291,19 @@ export type Database = {
           user_id: string
         }
         Update: {
+          color?: string | null
           created_at?: string
           description?: string | null
+          end_time?: string | null
           event_date?: string
           event_time?: string | null
+          event_type?: string | null
           google_event_id?: string | null
           id?: string
+          location?: string | null
+          needs_followup?: boolean | null
+          priority?: string | null
+          recurrence_parent_id?: string | null
           reminder?: boolean
           reminder_minutes_before?: number | null
           source?: string
@@ -282,6 +312,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "events_recurrence_parent_id_fkey"
+            columns: ["recurrence_parent_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "events_user_id_fkey"
             columns: ["user_id"]
@@ -337,6 +374,63 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      kirvano_events: {
+        Row: {
+          access_until: string | null
+          amount: number | null
+          created_at: string | null
+          customer_email: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          event_id: string | null
+          event_type: string
+          id: string
+          matched_user_id: string | null
+          processed_at: string | null
+          product_name: string | null
+          raw_payload: Json | null
+          status: string | null
+          subscription_id: string | null
+          transaction_id: string | null
+        }
+        Insert: {
+          access_until?: string | null
+          amount?: number | null
+          created_at?: string | null
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          event_id?: string | null
+          event_type: string
+          id?: string
+          matched_user_id?: string | null
+          processed_at?: string | null
+          product_name?: string | null
+          raw_payload?: Json | null
+          status?: string | null
+          subscription_id?: string | null
+          transaction_id?: string | null
+        }
+        Update: {
+          access_until?: string | null
+          amount?: number | null
+          created_at?: string | null
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          event_id?: string | null
+          event_type?: string
+          id?: string
+          matched_user_id?: string | null
+          processed_at?: string | null
+          product_name?: string | null
+          raw_payload?: Json | null
+          status?: string | null
+          subscription_id?: string | null
+          transaction_id?: string | null
+        }
+        Relationships: []
       }
       kirvano_payments: {
         Row: {
@@ -460,10 +554,13 @@ export type Database = {
       }
       profiles: {
         Row: {
+          access_until: string | null
           account_status: string
           created_at: string
           display_name: string | null
           id: string
+          kirvano_subscription_id: string | null
+          last_inactivity_alert_at: string | null
           link_code: string | null
           link_code_expires_at: string | null
           messages_limit: number
@@ -475,10 +572,13 @@ export type Database = {
           whatsapp_lid: string | null
         }
         Insert: {
+          access_until?: string | null
           account_status?: string
           created_at?: string
           display_name?: string | null
           id: string
+          kirvano_subscription_id?: string | null
+          last_inactivity_alert_at?: string | null
           link_code?: string | null
           link_code_expires_at?: string | null
           messages_limit?: number
@@ -490,10 +590,13 @@ export type Database = {
           whatsapp_lid?: string | null
         }
         Update: {
+          access_until?: string | null
           account_status?: string
           created_at?: string
           display_name?: string | null
           id?: string
+          kirvano_subscription_id?: string | null
+          last_inactivity_alert_at?: string | null
           link_code?: string | null
           link_code_expires_at?: string | null
           messages_limit?: number
@@ -621,6 +724,7 @@ export type Database = {
           event_id: string | null
           id: string
           message: string
+          processing_at: string | null
           recurrence: string
           recurrence_value: number | null
           send_at: string
@@ -636,6 +740,7 @@ export type Database = {
           event_id?: string | null
           id?: string
           message: string
+          processing_at?: string | null
           recurrence?: string
           recurrence_value?: number | null
           send_at: string
@@ -651,6 +756,7 @@ export type Database = {
           event_id?: string | null
           id?: string
           message?: string
+          processing_at?: string | null
           recurrence?: string
           recurrence_value?: number | null
           send_at?: string
@@ -677,6 +783,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      system_health: {
+        Row: {
+          checked_at: string
+          is_online: boolean
+          service: string
+          status_detail: string | null
+        }
+        Insert: {
+          checked_at?: string
+          is_online?: boolean
+          service: string
+          status_detail?: string | null
+        }
+        Update: {
+          checked_at?: string
+          is_online?: boolean
+          service?: string
+          status_detail?: string | null
+        }
+        Relationships: []
+      }
+      system_health_log: {
+        Row: {
+          checked_at: string
+          id: string
+          is_online: boolean
+          service: string
+          status_detail: string | null
+        }
+        Insert: {
+          checked_at?: string
+          id?: string
+          is_online: boolean
+          service: string
+          status_detail?: string | null
+        }
+        Update: {
+          checked_at?: string
+          id?: string
+          is_online?: boolean
+          service?: string
+          status_detail?: string | null
+        }
+        Relationships: []
       }
       transactions: {
         Row: {
@@ -803,7 +954,42 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_pending_reminders: {
+        Args: { p_limit?: number }
+        Returns: {
+          created_at: string
+          event_id: string | null
+          id: string
+          message: string
+          processing_at: string | null
+          recurrence: string
+          recurrence_value: number | null
+          send_at: string
+          sent_at: string | null
+          source: string
+          status: string
+          title: string | null
+          user_id: string
+          whatsapp_number: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "reminders"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       cleanup_old_error_logs: { Args: never; Returns: undefined }
+      get_admin_analytics: { Args: never; Returns: Json }
+      get_inactivity_alert_candidates: {
+        Args: { p_ago48h: string; p_ago7d: string; p_ago96h: string }
+        Returns: {
+          display_name: string
+          id: string
+          phone_number: string
+        }[]
+      }
+      get_user_id_by_email: { Args: { user_email: string }; Returns: string }
       send_pending_reminders: { Args: never; Returns: undefined }
     }
     Enums: {
