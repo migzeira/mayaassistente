@@ -14,7 +14,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import {
   Plus, TrendingDown, TrendingUp, Wallet, RefreshCw, Trash2, Download,
@@ -394,9 +393,6 @@ export default function Financas() {
   const prevIncome   = prevTx.filter(t => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
   const expenseChange = prevExpenses > 0 ? ((totalExpenses - prevExpenses) / prevExpenses * 100) : 0;
   const incomeChange  = prevIncome   > 0 ? ((totalIncome  - prevIncome)   / prevIncome   * 100) : 0;
-
-  // Daily avg
-  const daysElapsed = Math.max(differenceInDays(new Date() < periodEnd ? new Date() : periodEnd, periodStart), 1);
 
   // Category breakdown
   const expensesByCategory = periodTx
@@ -958,7 +954,7 @@ export default function Financas() {
                 <DialogHeader><DialogTitle>Gerenciar categorias</DialogTitle></DialogHeader>
                 <div className="space-y-3">
                   <div className="grid sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1">
-                    {categories.map((c, idx) => {
+                    {categories.map(c => {
                       const total = transactions.filter(t => t.category === c.name && t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
                       const conf = getCat(c.name);
                       return (
@@ -1410,9 +1406,6 @@ function RecurringRow({ r, freqLabel, onEdit, onDelete, onToggle }: {
   onToggle: (id: string, active: boolean) => void;
 }) {
   const conf = getCat(r.category);
-  function brl(v: number) {
-    return v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
   return (
     <div className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${r.active ? "bg-card border-border" : "bg-muted/20 border-border/40 opacity-60"}`}>
       <div className="w-1 h-8 rounded-full shrink-0" style={{ backgroundColor: r.type === "expense" ? "#ef4444" : "#10b981" }} />
