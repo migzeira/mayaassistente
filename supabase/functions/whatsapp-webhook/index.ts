@@ -4184,10 +4184,12 @@ async function handleScheduleMeeting(
 ): Promise<string> {
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: userTz });
 
-  // Extrai nome do contato — "com NomeProprio"
-  const contactMatch = text.match(/com\s+([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ][a-záéíóúâêîôûãõç]+(?:\s+[A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ][a-záéíóúâêîôûãõç]+)*)/i);
+  // Extrai nome do contato — "com [o/a/os/as] NomeProprio"
+  // Aceita artigos opcionais: "com o Guilherme", "com a Maria", "com guilherme" (minúsculo)
+  const contactMatch = text.match(/com\s+(?:o|a|os|as)\s+([A-Za-záéíóúâêîôûãõçÁÉÍÓÚÂÊÎÔÛÃÕÇ][a-záéíóúâêîôûãõç]+(?:\s+[A-Za-záéíóúâêîôûãõçÁÉÍÓÚÂÊÎÔÛÃÕÇ][a-záéíóúâêîôûãõç]+)*)/i)
+    ?? text.match(/com\s+([A-Za-záéíóúâêîôûãõçÁÉÍÓÚÂÊÎÔÛÃÕÇ][a-záéíóúâêîôûãõç]+(?:\s+[A-Za-záéíóúâêîôûãõçÁÉÍÓÚÂÊÎÔÛÃÕÇ][a-záéíóúâêîôûãõç]+)*)/i);
   if (!contactMatch) {
-    return "Não identifiquei com quem marcar a reunião. Tente: _Marca reunião com [Nome] amanhã às 14h_";
+    return "Não identifiquei com quem marcar a reunião. Tente: _Marca reunião com Guilherme amanhã às 14h_";
   }
   const contactName = contactMatch[1];
 
@@ -4200,7 +4202,9 @@ async function handleScheduleMeeting(
     .maybeSingle();
 
   if (!found) {
-    return `Não encontrei *${contactName}* nos seus contatos. Compartilhe o contato comigo primeiro! 📇`;
+    // Contato não está salvo — cria evento de agenda normalmente com o nome como título
+    const fallback = await handleAgendaCreate(userId, replyTo, text, null, language, userNickname, userTz);
+    return fallback.response;
   }
 
   // Extrai data/hora usando extractEvent (IA)
