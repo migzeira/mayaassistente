@@ -33,6 +33,7 @@ export type Intent =
   | "shadow_reminder_confirm"
   | "send_to_contact"
   | "schedule_meeting"
+  | "contact_save"
   | "ai_chat";
 
 export function classifyIntent(msg: string): Intent {
@@ -94,6 +95,14 @@ export function classifyIntent(msg: string): Intent {
     )
   )
     return "finance_record";
+
+  // Salvar contato digitado (nome + número no texto)
+  // "salva o contato João 11999" / "adiciona o João: 11999" / "guarda o numero da Cibele 11999"
+  if (
+    /\b(salva(r)?|adiciona(r)?|cadastra(r)?|guarda(r)?|registra(r)?)\s+(o\s+)?(contato|numero|telefone)\s+(d[oa]\s+)?[A-ZÁÉÍÓÚ]/i.test(m) ||
+    /\b(salva(r)?|adiciona(r)?)\s+(o\s+)?[A-ZÁÉÍÓÚ][a-záéíóú]+.{0,20}\d{8,}/i.test(m)
+  )
+    return "contact_save";
 
   // Agendar reunião/meeting com um contato salvo (com Google Meet)
   // "marca reunião com Fulano" / "agenda call com X amanhã às 14h"

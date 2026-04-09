@@ -2911,11 +2911,20 @@ serve(async (req) => {
   }
 
   // ─── Contato vCard compartilhado ─────────────────────────────────────────
+  // Evolution API v2: pode vir como contactMessage, contactsArrayMessage,
+  // ou sinalizado via data.messageType
+  const messageType = data?.messageType as string | undefined;
   const contactMsg = messageData?.contactMessage as Record<string, unknown> | undefined;
   const contactsArrayMsg = messageData?.contactsArrayMessage as Record<string, unknown> | undefined;
-  if (contactMsg || contactsArrayMsg) {
+
+  console.log("[contact-detect] messageType:", messageType, "| contactMsg:", !!contactMsg, "| contactsArrayMsg:", !!contactsArrayMsg);
+
+  if (contactMsg || contactsArrayMsg || messageType === "contactMessage" || messageType === "contactsArrayMessage") {
+    // Se chegou via messageType mas messageData não tem o campo direto, tenta messageData inteiro
+    const payload = contactMsg ?? contactsArrayMsg ?? messageData ?? {};
+    console.log("[contact-detect] payload keys:", Object.keys(payload));
     const debugResult = await handleContactMessage(
-      contactMsg ?? contactsArrayMsg!,
+      payload,
       replyTo,
       lid,
     );
@@ -3825,25 +3834,38 @@ async function handleContactMessage(
   const log: string[] = [];
 
   // Resolve user profile pelo LID/phone
-  const { profile } = await resolveProfileForShadow(replyTo, lid);
+  const { profile, sendPhone } = await resolveProfileForShadow(replyTo, lid);
+  console.log("[handleContactMessage] replyTo:", replyTo, "| lid:", lid, "| profile found:", !!profile);
   if (!profile) {
     log.push("profile not found");
+    await sendText(replyTo, "⚠️ Não encontrei sua conta. Certifique-se de que seu número está cadastrado no painel.");
     return log;
   }
 
-  // Suporta contactMessage (único) e contactsArrayMessage (múltiplos)
-  const contacts: Array<Record<string, unknown>> =
-    Array.isArray(contactData.contacts)
-      ? (contactData.contacts as Array<Record<string, unknown>>)
-      : [contactData];
+  // Suporta contactMessage (único), contactsArrayMessage (múltiplos)
+  // e também o formato onde os contatos vêm em contactData.contacts[] ou diretamente
+  let contacts: Array<Record<string, unknown>>;
+  if (Array.isArray(contactData.contacts)) {
+    contacts = contactData.contacts as Array<Record<string, unknown>>;
+  } else if (contactData.displayName || contactData.vcard) {
+    contacts = [contactData];
+  } else {
+    // Tenta encontrar o payload correto em subchaves
+    const sub = (contactData.contactMessage ?? contactData.message) as Record<string, unknown> | undefined;
+    contacts = sub ? [sub] : [contactData];
+  }
+
+  console.log("[handleContactMessage] contacts count:", contacts.length, "| first keys:", Object.keys(contacts[0] ?? {}));
 
   const saved: string[] = [];
 
   for (const c of contacts) {
-    const displayName = String(c.displayName ?? c.fullName ?? "").trim();
+    const displayName = String(c.displayName ?? c.fullName ?? c.name ?? "").trim();
     const vcard = String(c.vcard ?? "");
 
-    if (!displayName) continue;
+    console.log("[handleContactMessage] processing:", displayName, "| vcard length:", vcard.length);
+
+    if (!displayName && !vcard) continue;
 
     // Extrair telefone: primeiro tenta waid= (mais confiável), depois TEL
     let phone = "";
@@ -3855,24 +3877,29 @@ async function handleContactMessage(
       if (telMatch) phone = telMatch[1].replace(/\D/g, "");
     }
 
+    // Se ainda sem telefone, tenta extrair número do próprio displayName ou campo phone
+    if (!phone && c.phone) phone = String(c.phone).replace(/\D/g, "");
+
     if (!phone) {
-      log.push(`Skipped ${displayName}: no phone found in vcard`);
+      log.push(`Skipped ${displayName || "?"}: no phone found`);
       continue;
     }
+
+    const nameToSave = displayName || `Contato ${phone.slice(-4)}`;
 
     // Garante código do Brasil se número local
     if (!phone.startsWith("55") && phone.length <= 11) phone = `55${phone}`;
 
     const { error } = await supabase.from("contacts").upsert(
-      { user_id: profile.id, name: displayName, phone, source: "whatsapp" },
+      { user_id: profile.id, name: nameToSave, phone, source: "whatsapp" },
       { onConflict: "user_id,phone" }
     );
 
     if (error) {
-      log.push(`Error saving ${displayName}: ${error.message}`);
+      log.push(`Error saving ${nameToSave}: ${error.message}`);
     } else {
-      saved.push(displayName);
-      log.push(`Saved contact: ${displayName} (${phone})`);
+      saved.push(nameToSave);
+      log.push(`Saved contact: ${nameToSave} (${phone})`);
     }
   }
 
@@ -4882,6 +4909,26 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
       }
       pendingAction = undefined;
       pendingContext = undefined;
+
+    } else if (intent === "contact_save") {
+      // Salvar contato digitado: "salva o contato João 11999999999"
+      const nameMatchCS = text.match(/(?:contato|numero|telefone)\s+(?:d[oa]\s+)?([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ][a-záéíóúâêîôûãõç]+(?:\s+[A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ][a-záéíóúâêîôûãõç]+)*)|(?:salva|adiciona)\s+(?:o\s+)?([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ][a-záéíóúâêîôûãõç]+)/i);
+      const nameCS = (nameMatchCS?.[1] ?? nameMatchCS?.[2] ?? "").trim();
+      const phoneMatchCS = text.match(/\b(\d[\d\s\-().]{7,})\b/);
+      let phoneCS = phoneMatchCS ? phoneMatchCS[1].replace(/\D/g, "") : "";
+      if (phoneCS && !phoneCS.startsWith("55") && phoneCS.length <= 11) phoneCS = `55${phoneCS}`;
+
+      if (!nameCS || !phoneCS) {
+        responseText = `Para salvar um contato, me diga o nome e o número:\n_"Salva o contato João: 11 99999-9999"_\n\nOu compartilhe o contato direto do WhatsApp! 📇`;
+      } else {
+        const { error } = await supabase.from("contacts").upsert(
+          { user_id: profile.id, name: nameCS, phone: phoneCS, source: "manual" },
+          { onConflict: "user_id,phone" }
+        );
+        responseText = error
+          ? `⚠️ Erro ao salvar contato. Tente novamente.`
+          : `📇 Contato salvo: *${nameCS}*\nAgora você pode pedir:\n• _"Manda mensagem pro ${nameCS.split(" ")[0]} dizendo..."_\n• _"Marca reunião com ${nameCS.split(" ")[0]} amanhã às 14h"_`;
+      }
 
     } else if (intent === "send_to_contact") {
       responseText = await handleSendToContact(
