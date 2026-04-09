@@ -7,12 +7,51 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { format, differenceInDays, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RefreshCw, MessageSquare, ArrowLeft, Bot, User } from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+} from "recharts";
+
+const INTENT_LABELS: Record<string, string> = {
+  finance_record: "Registrar gasto/receita",
+  finance_report: "Relatório financeiro",
+  budget_set: "Definir orçamento",
+  budget_query: "Consultar orçamento",
+  recurring_create: "Transação recorrente",
+  habit_create: "Criar hábito",
+  habit_checkin: "Check-in de hábito",
+  agenda_create: "Criar evento",
+  agenda_query: "Consultar agenda",
+  agenda_edit: "Editar evento",
+  agenda_delete: "Cancelar evento",
+  agenda_lookup: "Buscar evento",
+  notes_save: "Salvar anotação",
+  reminder_set: "Criar lembrete",
+  reminder_list: "Listar lembretes",
+  reminder_cancel: "Cancelar lembrete",
+  reminder_edit: "Editar lembrete",
+  reminder_snooze: "Adiar lembrete",
+  event_followup: "Follow-up de evento",
+  statement_import: "Importar extrato",
+  greeting: "Saudação",
+  ai_chat: "Conversa livre",
+};
+
+const INTENT_COLORS = [
+  "#8b5cf6", "#6366f1", "#3b82f6", "#06b6d4",
+  "#10b981", "#84cc16", "#f59e0b", "#ef4444",
+  "#ec4899", "#a855f7",
+];
+
+function intentLabel(intent: string) {
+  return INTENT_LABELS[intent] ?? intent;
+}
 
 interface Props {
   userId: string;
@@ -34,6 +73,15 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
   const [reminders, setReminders] = useState<any[]>([]);
   const [notes, setNotes] = useState<any[]>([]);
   const [activatingDays, setActivatingDays] = useState("");
+  const [analytics, setAnalytics] = useState<{
+    totalMessages: number;
+    avgResponseMs: number | null;
+    successRate: number | null;
+    distinctIntents: number;
+    dailyVolume: { day: string; count: number }[];
+    topIntents: { intent: string; count: number }[];
+  } | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   // Chat view state
   const [selectedConv, setSelectedConv] = useState<any>(null);
@@ -83,6 +131,54 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
     setConvMessages(data || []);
     setLoadingMsgs(false);
   }, []);
+
+  const loadAnalytics = useCallback(async () => {
+    setAnalyticsLoading(true);
+    const since30 = new Date(); since30.setDate(since30.getDate() - 30);
+    const since14 = new Date(); since14.setDate(since14.getDate() - 14);
+
+    const [{ data: convs }, { data: metrics }] = await Promise.all([
+      supabase.from("conversations").select("id").eq("user_id", userId),
+      (supabase as any).from("bot_metrics").select("intent, processing_time_ms, success, error_type, created_at")
+        .eq("user_id", userId).gte("created_at", since30.toISOString()).order("created_at", { ascending: false }),
+    ]);
+
+    const convIds = convs?.map((c: { id: string }) => c.id) ?? [];
+    const [{ data: msgs30 }, { data: msgs14 }] = await Promise.all([
+      convIds.length > 0
+        ? supabase.from("messages").select("intent, created_at, role").in("conversation_id", convIds).eq("role", "user").gte("created_at", since30.toISOString())
+        : Promise.resolve({ data: [] }),
+      convIds.length > 0
+        ? supabase.from("messages").select("created_at").in("conversation_id", convIds).eq("role", "user").gte("created_at", since14.toISOString())
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const metricsList = (metrics as any[]) ?? [];
+    const totalMessages = msgs30?.length ?? 0;
+    const successCount = metricsList.filter((m) => m.success).length;
+    const totalMetrics = metricsList.length;
+    const avgResponseMs = totalMetrics > 0
+      ? metricsList.filter((m) => m.processing_time_ms != null).reduce((s, m, _, arr) => s + m.processing_time_ms / arr.length, 0)
+      : null;
+    const successRate = totalMetrics > 0 ? (successCount / totalMetrics) * 100 : null;
+    const distinctIntents = new Set((msgs30 ?? []).map((m: any) => m.intent).filter(Boolean)).size;
+
+    const dayMap: Record<string, number> = {};
+    (msgs14 ?? []).forEach((m: any) => { const k = m.created_at.slice(0, 10); dayMap[k] = (dayMap[k] ?? 0) + 1; });
+    const dailyVolume = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(); d.setDate(d.getDate() - (13 - i));
+      const key = d.toLocaleDateString("sv-SE");
+      return { day: d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }), count: dayMap[key] ?? 0 };
+    });
+
+    const intentMap: Record<string, number> = {};
+    (msgs30 ?? []).forEach((m: any) => { if (m.intent) intentMap[m.intent] = (intentMap[m.intent] ?? 0) + 1; });
+    const topIntents = Object.entries(intentMap).sort((a, b) => b[1] - a[1]).slice(0, 10)
+      .map(([intent, count]) => ({ intent: intentLabel(intent), count }));
+
+    setAnalytics({ totalMessages, avgResponseMs, successRate, distinctIntents, dailyVolume, topIntents });
+    setAnalyticsLoading(false);
+  }, [userId]);
 
   const refreshConvMessages = async () => {
     if (!selectedConv) return;
@@ -265,6 +361,7 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
                 <TabsTrigger value="notes">Notas ({notes.length})</TabsTrigger>
                 <TabsTrigger value="agent">Agente</TabsTrigger>
                 <TabsTrigger value="integrations">Integrações</TabsTrigger>
+                <TabsTrigger value="analytics" onClick={() => { if (!analytics) loadAnalytics(); }}>Analytics</TabsTrigger>
               </TabsList>
 
               {/* ── CONVERSAS: full chat view ── */}
@@ -504,6 +601,92 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
                   ))}
                   {integrations.length === 0 && <p className="text-muted-foreground">Nenhuma integração</p>}
                 </div>
+              </TabsContent>
+
+              <TabsContent value="analytics">
+                {analyticsLoading || !analytics ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {[1,2,3,4].map(i => <Skeleton key={i} className="h-20" />)}
+                    </div>
+                    <Skeleton className="h-48 w-full" />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-muted-foreground">Últimos 30 dias</p>
+                      <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs" onClick={loadAnalytics} disabled={analyticsLoading}>
+                        <RefreshCw className="h-3 w-3" /> Atualizar
+                      </Button>
+                    </div>
+
+                    {/* KPI cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {[
+                        { label: "Mensagens", value: analytics.totalMessages.toLocaleString("pt-BR") },
+                        { label: "Resp. média", value: analytics.avgResponseMs == null ? "—" : analytics.avgResponseMs >= 1000 ? `${(analytics.avgResponseMs/1000).toFixed(1)}s` : `${Math.round(analytics.avgResponseMs)}ms` },
+                        { label: "Taxa sucesso", value: analytics.successRate == null ? "—" : `${analytics.successRate.toFixed(1)}%` },
+                        { label: "Intents", value: analytics.distinctIntents.toLocaleString("pt-BR") },
+                      ].map(kpi => (
+                        <Card key={kpi.label} className="bg-muted/30">
+                          <CardHeader className="pb-1 pt-3 px-3">
+                            <CardTitle className="text-xs font-medium text-muted-foreground">{kpi.label}</CardTitle>
+                          </CardHeader>
+                          <CardContent className="pb-3 px-3">
+                            <p className="text-xl font-bold">{kpi.value}</p>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+
+                    {/* Charts */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <Card className="bg-muted/30">
+                        <CardHeader className="pb-2 pt-3 px-4">
+                          <CardTitle className="text-sm">Volume de mensagens (14 dias)</CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-2 pb-3">
+                          {analytics.dailyVolume.every(d => d.count === 0) ? (
+                            <p className="text-muted-foreground text-xs py-8 text-center">Sem dados suficientes</p>
+                          ) : (
+                            <ResponsiveContainer width="100%" height={180}>
+                              <BarChart data={analytics.dailyVolume} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+                                <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+                                <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+                                <Tooltip />
+                                <Bar dataKey="count" name="Mensagens" radius={[3,3,0,0]}>
+                                  {analytics.dailyVolume.map((_, i) => <Cell key={i} fill="#6366f1" />)}
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      <Card className="bg-muted/30">
+                        <CardHeader className="pb-2 pt-3 px-4">
+                          <CardTitle className="text-sm">Intents mais usados</CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-2 pb-3">
+                          {analytics.topIntents.length === 0 ? (
+                            <p className="text-muted-foreground text-xs py-8 text-center">Sem dados suficientes</p>
+                          ) : (
+                            <ResponsiveContainer width="100%" height={Math.max(180, analytics.topIntents.length * 28)}>
+                              <BarChart data={analytics.topIntents} layout="vertical" margin={{ top: 0, right: 16, left: 8, bottom: 0 }}>
+                                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10 }} />
+                                <YAxis type="category" dataKey="intent" width={150} tick={{ fontSize: 10 }} />
+                                <Tooltip />
+                                <Bar dataKey="count" name="Ocorrências" radius={[0,3,3,0]}>
+                                  {analytics.topIntents.map((_, i) => <Cell key={i} fill={INTENT_COLORS[i % INTENT_COLORS.length]} />)}
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </>

@@ -101,7 +101,7 @@ export default function Lembretes() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState<"all" | "pending" | "sent" | "recurring">("all");
+  const [filter, setFilter] = useState<"all" | "pending" | "sent" | "recurring">("pending");
 
   // Form state
   const [title, setTitle] = useState("");
@@ -133,6 +133,7 @@ export default function Lembretes() {
       .select("*")
       .eq("user_id", user!.id)
       .neq("status", "cancelled")
+      .neq("source", "habit")
       .order("created_at", { ascending: false });
 
     const sorted = ((data as any[]) ?? []).sort((a, b) => {
@@ -417,7 +418,7 @@ export default function Lembretes() {
 
       {/* Filtros */}
       <div className="flex gap-2 flex-wrap">
-        {(["all","pending","recurring","sent"] as const).map(f => (
+        {(["pending","recurring","all","sent"] as const).map(f => (
           <Button
             key={f}
             variant={filter === f ? "default" : "outline"}

@@ -1,4 +1,4 @@
-import { Home, Wallet, CalendarDays, StickyNote, Link2, Settings, User, LogOut, Shield, Bell, X, Zap, BarChart2, BookUser } from "lucide-react";
+import { Home, Wallet, CalendarDays, StickyNote, Link2, Settings, User, LogOut, Shield, Bell, X, Zap, BookUser } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import logoEscrita from "@/assets/logo_escrita.webp";
 import logoIcon from "@/assets/logo_icon.webp";
@@ -27,7 +27,6 @@ const menuItems = [
   { title: "Hábitos", url: "/dashboard/habitos", icon: Zap },
   { title: "Contatos", url: "/dashboard/contatos", icon: BookUser },
   { title: "Integrações", url: "/dashboard/integracoes", icon: Link2 },
-  { title: "Analytics", url: "/dashboard/analytics", icon: BarChart2 },
   { title: "Config. do Agente", url: "/dashboard/agente", icon: Settings },
   { title: "Meu Perfil", url: "/dashboard/perfil", icon: User },
 ];

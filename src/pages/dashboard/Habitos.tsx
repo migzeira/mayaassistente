@@ -10,14 +10,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress";
+
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
-  Plus, Flame, Trophy, Target, CheckCircle2, Trash2, Settings2,
+  Plus, Flame, Trophy, CheckCircle2, Trash2, Settings2,
   Zap, Pencil, X,
 } from "lucide-react";
 import { format, startOfWeek, addDays, isSameDay } from "date-fns";
@@ -425,11 +425,6 @@ export default function Habitos() {
   const customHabits = habits.filter(h => !h.preset_key);
   // Bug #2: only count today's logs for *currently active* habits to prevent > 100%
   const activeHabitIds = new Set(activeHabits.map(h => h.id));
-  const todayCompletions = logs.filter(l => l.logged_date === today && activeHabitIds.has(l.habit_id)).length;
-  const completionPct = activeHabits.length > 0
-    ? Math.min(100, Math.round((todayCompletions / activeHabits.length) * 100))
-    : 0;
-  const longestStreak = habits.reduce((max, h) => Math.max(max, h.best_streak), 0);
 
   // ── Activate preset: open config modal ────────────────────────
   const handlePresetToggle = async (preset: PresetDef, shouldActivate: boolean) => {
@@ -772,38 +767,6 @@ export default function Habitos() {
         }}>
           <Plus className="mr-2 h-4 w-4" /> Criar hábito
         </Button>
-      </div>
-
-      {/* ── Stats ── */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card className="bg-card border-border">
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Ativos</p>
-              <Zap className="h-4 w-4 text-yellow-500/60" />
-            </div>
-            <p className="text-2xl font-bold">{activeHabits.length}</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border-border">
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Hoje</p>
-              <Target className="h-4 w-4 text-primary/60" />
-            </div>
-            <p className="text-2xl font-bold">{todayCompletions}/{activeHabits.length}</p>
-            <Progress value={completionPct} className="h-1 mt-2" />
-          </CardContent>
-        </Card>
-        <Card className="bg-card border-border">
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Recorde</p>
-              <Trophy className="h-4 w-4 text-yellow-500/60" />
-            </div>
-            <p className="text-2xl font-bold">{longestStreak}<span className="text-sm font-normal text-muted-foreground ml-1">dias</span></p>
-          </CardContent>
-        </Card>
       </div>
 
       {/* ── Preset Habits Grid ── */}
