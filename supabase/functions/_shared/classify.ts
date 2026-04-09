@@ -31,6 +31,8 @@ export type Intent =
   | "shadow_finance_confirm"
   | "shadow_event_confirm"
   | "shadow_reminder_confirm"
+  | "send_to_contact"
+  | "schedule_meeting"
   | "ai_chat";
 
 export function classifyIntent(msg: string): Intent {
@@ -92,6 +94,21 @@ export function classifyIntent(msg: string): Intent {
     )
   )
     return "finance_record";
+
+  // Agendar reunião/meeting com um contato salvo (com Google Meet)
+  // "marca reunião com Fulano" / "agenda call com X amanhã às 14h"
+  if (
+    /\b(marca(r)?|agenda(r)?|cria(r)?|marcar)\s+(uma?\s+)?(reuniao|meeting|call|chamada|videochamada|videoconferencia|conferencia)\s+(com|pra|para)\s+\w/i.test(m)
+  )
+    return "schedule_meeting";
+
+  // Enviar mensagem para um contato salvo
+  // "manda mensagem pra Cibele dizendo X" / "fala pra João que..." / "daqui 30min manda pra X..."
+  if (
+    /\b(manda(r)?|envia(r)?|fala(r)?|diz(er)?|avisa(r)?)\s+(mensagem\s+)?(pra|para|ao?)\s+[A-ZÁÉÍÓÚ]/i.test(m) &&
+    !/\b(lembrete|reminder|me avisa|me lembra)\b/i.test(m)
+  )
+    return "send_to_contact";
 
   // Criar agenda
   if (

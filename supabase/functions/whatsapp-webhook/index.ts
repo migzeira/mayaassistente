@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendText, sendImage, sendButtons, extractPhone, downloadMediaBase64, resolveLidToPhone } from "../_shared/evolution.ts";
 import { generateExpenseChartUrl } from "../_shared/chart.ts";
-import { syncGoogleCalendar, syncGoogleSheets, syncNotion } from "../_shared/integrations.ts";
+import { syncGoogleCalendar, syncGoogleSheets, syncNotion, createCalendarEventWithMeet } from "../_shared/integrations.ts";
 import {
   chat,
   extractTransactions,
@@ -2879,6 +2879,20 @@ serve(async (req) => {
     });
   }
 
+  // ─── Contato vCard compartilhado ─────────────────────────────────────────
+  const contactMsg = messageData?.contactMessage as Record<string, unknown> | undefined;
+  const contactsArrayMsg = messageData?.contactsArrayMessage as Record<string, unknown> | undefined;
+  if (contactMsg || contactsArrayMsg) {
+    const debugResult = await handleContactMessage(
+      contactMsg ?? contactsArrayMsg!,
+      replyTo,
+      lid,
+    );
+    return new Response(JSON.stringify({ ok: true, debug: debugResult }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   if (!text?.trim()) {
     return new Response("OK");
   }
@@ -3764,6 +3778,291 @@ async function handleDocumentMessage(
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTATOS — vCard, envio de mensagem e reuniões
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Processa contactMessage/contactsArrayMessage recebido via WhatsApp.
+ * Faz parse do vCard, salva na tabela contacts (upsert) e confirma ao usuário.
+ */
+async function handleContactMessage(
+  contactData: Record<string, unknown>,
+  replyTo: string,
+  lid: string,
+): Promise<string[]> {
+  const log: string[] = [];
+
+  // Resolve user profile pelo LID/phone
+  const profile = await resolveProfileForShadow(lid, replyTo);
+  if (!profile) {
+    log.push("profile not found");
+    return log;
+  }
+
+  // Suporta contactMessage (único) e contactsArrayMessage (múltiplos)
+  const contacts: Array<Record<string, unknown>> =
+    Array.isArray(contactData.contacts)
+      ? (contactData.contacts as Array<Record<string, unknown>>)
+      : [contactData];
+
+  const saved: string[] = [];
+
+  for (const c of contacts) {
+    const displayName = String(c.displayName ?? c.fullName ?? "").trim();
+    const vcard = String(c.vcard ?? "");
+
+    if (!displayName) continue;
+
+    // Extrair telefone: primeiro tenta waid= (mais confiável), depois TEL
+    let phone = "";
+    const waidMatch = vcard.match(/waid=(\d+)/i);
+    if (waidMatch) {
+      phone = waidMatch[1];
+    } else {
+      const telMatch = vcard.match(/TEL[^:\n]*:([+\d\s\-().]+)/i);
+      if (telMatch) phone = telMatch[1].replace(/\D/g, "");
+    }
+
+    if (!phone) {
+      log.push(`Skipped ${displayName}: no phone found in vcard`);
+      continue;
+    }
+
+    // Garante código do Brasil se número local
+    if (!phone.startsWith("55") && phone.length <= 11) phone = `55${phone}`;
+
+    const { error } = await supabase.from("contacts").upsert(
+      { user_id: profile.id, name: displayName, phone, source: "whatsapp" },
+      { onConflict: "user_id,phone" }
+    );
+
+    if (error) {
+      log.push(`Error saving ${displayName}: ${error.message}`);
+    } else {
+      saved.push(displayName);
+      log.push(`Saved contact: ${displayName} (${phone})`);
+    }
+  }
+
+  if (saved.length > 0) {
+    const names = saved.join(", ");
+    const plural = saved.length > 1;
+    const firstName = saved[0].split(" ")[0];
+    await sendText(
+      replyTo,
+      `📇 Contato${plural ? "s" : ""} salvo${plural ? "s" : ""}: *${names}*\n\nAgora você pode pedir:\n• _"Marca reunião com ${firstName} amanhã às 14h"_\n• _"Manda mensagem pra ${firstName} dizendo..."_`
+    );
+  }
+
+  return log;
+}
+
+/**
+ * Envia mensagem para um contato salvo, imediatamente ou com atraso.
+ * Ex: "manda pra Cibele dizendo pegar pão" / "daqui 30min manda pra João que..."
+ */
+async function handleSendToContact(
+  userId: string,
+  replyTo: string,
+  text: string,
+  userTz: string,
+  agentName: string,
+  userNickname: string | null,
+  pushName: string,
+): Promise<string> {
+  const norm = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  // Detecta atraso: "daqui 30 minutos", "daqui 1 hora"
+  let delayMs = 0;
+  const delayMatch = norm.match(/daqui\s+(\d+)\s*(minuto|hora)/i);
+  if (delayMatch) {
+    const num = parseInt(delayMatch[1]);
+    const unit = delayMatch[2].toLowerCase();
+    delayMs = unit.startsWith("min") ? num * 60_000 : num * 3_600_000;
+  }
+
+  // Extrai nome do contato — "pra/para NomeProprio"
+  const nameMatch = text.match(/(?:pra|para|ao?)\s+([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ][a-záéíóúâêîôûãõç]+(?:\s+[A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ][a-záéíóúâêîôûãõç]+)*)/i);
+  if (!nameMatch) {
+    return "Não identifiquei para quem enviar. Tente: _Manda pra [Nome] dizendo [mensagem]_";
+  }
+  const contactName = nameMatch[1];
+
+  // Busca contato no banco
+  const { data: found } = await supabase
+    .from("contacts")
+    .select("*")
+    .eq("user_id", userId)
+    .ilike("name", `%${contactName}%`)
+    .limit(1)
+    .maybeSingle();
+
+  if (!found) {
+    return `Não encontrei *${contactName}* nos seus contatos. Compartilhe o contato comigo no WhatsApp primeiro! 📇`;
+  }
+
+  // Extrai conteúdo da mensagem: tudo após "dizendo", "dizer", "que", ":"
+  const msgMatch = text.match(/(?:dizendo|dizer|falando|que\s+(?!tal\b)|:\s*)(.+)/i);
+  const msgContent = msgMatch ? msgMatch[1].trim() : text;
+
+  const senderLabel = userNickname || pushName || "seu contato";
+  const outgoing = `💬 _Mensagem de ${senderLabel} (via ${agentName})_\n\n${msgContent}`;
+
+  if (delayMs > 0) {
+    const sendAt = new Date(Date.now() + delayMs).toISOString();
+    await supabase.from("reminders").insert({
+      user_id: userId,
+      whatsapp_number: found.phone,
+      title: `Mensagem para ${found.name}`,
+      message: outgoing,
+      send_at: sendAt,
+      recurrence: "none",
+      source: "send_to_contact",
+      status: "pending",
+    });
+    const mins = Math.round(delayMs / 60_000);
+    const timeLabel = mins < 60 ? `${mins} minuto${mins > 1 ? "s" : ""}` : `${Math.round(mins / 60)} hora${mins >= 120 ? "s" : ""}`;
+    return `✅ Agendado! Vou mandar a mensagem pra *${found.name}* em ${timeLabel}.`;
+  }
+
+  await sendText(found.phone, outgoing);
+  return `✅ Mensagem enviada pra *${found.name}*!`;
+}
+
+/** Formata data YYYY-MM-DD em português legível */
+function formatDateBR(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const months = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  return `${d} de ${months[m - 1]}`;
+}
+
+/**
+ * Cria reunião com Google Meet para um contato salvo.
+ * Notifica o contato via WhatsApp e agenda lembretes 10 min antes para ambos.
+ */
+async function handleScheduleMeeting(
+  userId: string,
+  replyTo: string,
+  text: string,
+  userTz: string,
+  agentName: string,
+  userNickname: string | null,
+  pushName: string,
+  language: string,
+): Promise<string> {
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: userTz });
+
+  // Extrai nome do contato — "com NomeProprio"
+  const contactMatch = text.match(/com\s+([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ][a-záéíóúâêîôûãõç]+(?:\s+[A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ][a-záéíóúâêîôûãõç]+)*)/i);
+  if (!contactMatch) {
+    return "Não identifiquei com quem marcar a reunião. Tente: _Marca reunião com [Nome] amanhã às 14h_";
+  }
+  const contactName = contactMatch[1];
+
+  const { data: found } = await supabase
+    .from("contacts")
+    .select("*")
+    .eq("user_id", userId)
+    .ilike("name", `%${contactName}%`)
+    .limit(1)
+    .maybeSingle();
+
+  if (!found) {
+    return `Não encontrei *${contactName}* nos seus contatos. Compartilhe o contato comigo primeiro! 📇`;
+  }
+
+  // Extrai data/hora usando extractEvent (IA)
+  let extracted: Awaited<ReturnType<typeof extractEvent>>;
+  try {
+    extracted = await extractEvent(text, today, language);
+  } catch {
+    return "Não consegui entender a data. Tente: _Marca reunião com [Nome] amanhã às 14h_";
+  }
+
+  if (!extracted?.date) {
+    return `Para marcar com *${found.name}*, me diga a data e hora. Ex: _amanhã às 14h_ ou _sexta às 10h_`;
+  }
+
+  const title = `Reunião com ${found.name}`;
+  const description = `Reunião agendada pela ${agentName} — assistente de ${userNickname || pushName}`;
+
+  // Cria evento no Google Calendar com Google Meet
+  const { eventId, meetLink } = await createCalendarEventWithMeet(
+    userId, title, extracted.date, extracted.time ?? null, null, description
+  );
+
+  // Salva na tabela events
+  await supabase.from("events").insert({
+    user_id: userId,
+    title,
+    event_date: extracted.date,
+    event_time: extracted.time ?? null,
+    description,
+    status: "confirmed",
+    google_event_id: eventId ?? null,
+    source: "whatsapp_meeting",
+  });
+
+  // Agenda lembretes 10 min antes (se tiver horário)
+  if (extracted.time) {
+    try {
+      const meetingDt = new Date(`${extracted.date}T${extracted.time}:00`);
+      const reminderAt = new Date(meetingDt.getTime() - 10 * 60_000).toISOString();
+      const meetSuffix = meetLink ? `\n\n🔗 ${meetLink}` : "";
+
+      await supabase.from("reminders").insert([
+        {
+          user_id: userId,
+          whatsapp_number: replyTo,
+          title: `Reunião com ${found.name} em 10 min`,
+          message: `⏰ *Lembrete!*\nDaqui 10 minutos você tem reunião com *${found.name}*${meetSuffix}`,
+          send_at: reminderAt,
+          recurrence: "none",
+          status: "pending",
+          source: "meeting_reminder",
+        },
+        {
+          user_id: userId,
+          whatsapp_number: found.phone,
+          title: `Lembrete reunião em 10 min`,
+          message: `⏰ *Lembrete!*\nOi *${found.name}*! Daqui 10 minutos você tem reunião com *${userNickname || pushName}*${meetSuffix}`,
+          send_at: reminderAt,
+          recurrence: "none",
+          status: "pending",
+          source: "meeting_reminder_contact",
+        },
+      ]);
+    } catch (e) {
+      console.error("[schedule_meeting] reminder insert error:", e);
+    }
+  }
+
+  // Notifica o contato via WhatsApp
+  const dateLabel = formatDateBR(extracted.date);
+  const timeLabel = extracted.time ? ` às *${extracted.time}*` : "";
+  const contactMsg =
+    `👋 Olá, *${found.name}*!\n\n` +
+    `Sou a *${agentName}*, assistente virtual de *${userNickname || pushName}*.\n\n` +
+    `Ele(a) pediu para marcar uma reunião com você:\n\n` +
+    `📅 *${dateLabel}*${timeLabel}` +
+    (meetLink ? `\n\n🔗 *Link da reunião:*\n${meetLink}` : "") +
+    `\n\nQualquer dúvida, entre em contato diretamente. 😊`;
+
+  sendText(found.phone, contactMsg).catch(() => {});
+
+  // Resposta ao usuário
+  let response =
+    `✅ Reunião agendada com *${found.name}*!\n\n` +
+    `📅 ${dateLabel}${timeLabel}`;
+  if (meetLink) response += `\n\n🔗 *Link Meet:*\n${meetLink}`;
+  response +=
+    `\n\n📱 Mandei o convite para *${found.name}* pelo WhatsApp` +
+    (extracted.time ? " e vou lembrar vocês 10 minutos antes. ⏰" : ".");
+
+  return response;
+}
+
 const CATEGORY_EMOJI: Record<string, string> = {
   alimentacao: "🍔",
   transporte: "🚗",
@@ -4497,6 +4796,16 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
       }
       pendingAction = undefined;
       pendingContext = undefined;
+
+    } else if (intent === "send_to_contact") {
+      responseText = await handleSendToContact(
+        profile.id, sendPhone || replyTo, text, userTz, agentName, userNickname, pushName
+      );
+
+    } else if (intent === "schedule_meeting") {
+      responseText = await handleScheduleMeeting(
+        profile.id, sendPhone || replyTo, text, userTz, agentName, userNickname, pushName, language
+      );
 
     } else {
       // Chat geral com IA (moduleChat já verificado acima via moduleActive)

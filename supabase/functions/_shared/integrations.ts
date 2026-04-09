@@ -191,6 +191,71 @@ export async function deleteGoogleCalendar(
   return res.ok || res.status === 410;
 }
 
+/**
+ * Cria evento no Google Calendar com link do Google Meet.
+ * Requer que o token OAuth tenha escopo calendar.events.
+ * Retorna eventId e meetLink (null se Google Calendar não estiver conectado).
+ */
+export async function createCalendarEventWithMeet(
+  userId: string,
+  title: string,
+  date: string,
+  time: string | null,
+  endTime?: string | null,
+  description?: string | null,
+  attendeeEmail?: string | null
+): Promise<{ eventId: string | null; meetLink: string | null }> {
+  const integration = await getIntegration(userId, "google_calendar");
+  if (!integration) return { eventId: null, meetLink: null };
+
+  const start = time
+    ? { dateTime: `${date}T${time}:00`, timeZone: "America/Sao_Paulo" }
+    : { date };
+  const end = endTime
+    ? { dateTime: `${date}T${endTime}:00`, timeZone: "America/Sao_Paulo" }
+    : time
+      ? { dateTime: `${date}T${time}:00`, timeZone: "America/Sao_Paulo" }
+      : { date };
+
+  const body: Record<string, unknown> = {
+    summary: title,
+    start,
+    end,
+    conferenceData: {
+      createRequest: {
+        requestId: crypto.randomUUID(),
+        conferenceSolutionKey: { type: "hangoutsMeet" },
+      },
+    },
+  };
+  if (description) body.description = description;
+  if (attendeeEmail) body.attendees = [{ email: attendeeEmail }];
+
+  const res = await fetch(
+    "https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${integration.access_token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    }
+  );
+
+  if (!res.ok) {
+    console.error("Google Calendar Meet create error:", res.status, await res.text());
+    return { eventId: null, meetLink: null };
+  }
+
+  const data = await res.json() as Record<string, unknown>;
+  const confData = data.conferenceData as Record<string, unknown> | undefined;
+  const entryPoints = (confData?.entryPoints as Array<Record<string, unknown>>) ?? [];
+  const meetLink = entryPoints.find(ep => ep.entryPointType === "video")?.uri as string ?? null;
+
+  return { eventId: (data.id as string) ?? null, meetLink };
+}
+
 /** Adiciona linha ao Google Sheets */
 export async function syncGoogleSheets(
   userId: string,
