@@ -292,7 +292,7 @@ function applyTemplate(template: string, vars: Record<string, string>): string {
 // HABIT HANDLERS
 // ─────────────────────────────────────────────
 
-async function handleHabitCreate(userId: string, phone: string, message: string): Promise<string> {
+async function handleHabitCreate(userId: string, phone: string, message: string, userTz = "America/Sao_Paulo"): Promise<string> {
   const prompt = `Extraia de uma frase em português os dados para criar um hábito diário.
 Retorne JSON puro: {"name":"nome curto","description":"descricao","reminder_time":"HH:MM","icon":"emoji"}
 
@@ -303,7 +303,7 @@ Exemplos:
 
 Frase: "${message}"`;
 
-  const aiResponse = await chat(prompt);
+  const aiResponse = await chat([{ role: "user", content: prompt }], "Voce extrai dados de habitos. Responda APENAS com JSON valido.");
   let parsed: any;
   try {
     const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
@@ -337,12 +337,13 @@ Frase: "${message}"`;
     return "Erro ao criar habito. Tente novamente.";
   }
 
-  // Cria lembrete recorrente diario para o habito
-  const now = new Date();
+  // Cria lembrete recorrente diario para o habito (respeita timezone do usuario)
   const [hours, mins] = (parsed.reminder_time || "08:00").split(":").map(Number);
-  const sendAt = new Date(now);
-  sendAt.setHours(hours, mins, 0, 0);
-  if (sendAt <= now) sendAt.setDate(sendAt.getDate() + 1);
+  // Calcula send_at no timezone do usuario convertendo para UTC
+  const todayLocal = new Date().toLocaleDateString("sv-SE", { timeZone: userTz });
+  const tzOff = getTzOffset(userTz);
+  const sendAt = new Date(`${todayLocal}T${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}:00${tzOff}`);
+  if (sendAt <= new Date()) sendAt.setDate(sendAt.getDate() + 1);
 
   await supabase.from("reminders").insert({
     user_id: userId,
@@ -358,8 +359,9 @@ Frase: "${message}"`;
   return `✅ *Habito criado!*\n\n${parsed.icon || "🎯"} *${parsed.name}*\n${parsed.description ? `📝 ${parsed.description}\n` : ""}⏰ Lembrete diario as ${parsed.reminder_time || "08:00"}\n\nQuando completar, responda *feito* e eu registro seu progresso!`;
 }
 
-async function handleHabitCheckin(userId: string, message: string): Promise<string> {
-  const today = new Date().toISOString().split("T")[0];
+async function handleHabitCheckin(userId: string, message: string, userTz = "America/Sao_Paulo"): Promise<string> {
+  // Usa timezone do usuario para determinar "hoje" corretamente
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: userTz });
 
   // Busca habitos ativos do usuario
   const { data: habits } = await supabase
@@ -400,8 +402,18 @@ async function handleHabitCheckin(userId: string, message: string): Promise<stri
     return "Erro ao registrar. Tente novamente.";
   }
 
-  // Atualiza streak
-  const newStreak = (habit.current_streak || 0) + 1;
+  // Verifica se o dia anterior tinha check-in para validar streak consecutivo
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toLocaleDateString("sv-SE", { timeZone: userTz });
+  const { data: yesterdayLog } = await (supabase.from("habit_logs") as any)
+    .select("id")
+    .eq("habit_id", habit.id)
+    .eq("logged_date", yesterdayStr)
+    .maybeSingle();
+
+  // Se ontem nao teve check-in, reseta streak para 1; senao incrementa
+  const newStreak = yesterdayLog ? (habit.current_streak || 0) + 1 : 1;
   const bestStreak = Math.max(newStreak, habit.best_streak || 0);
   await supabase.from("habits").update({
     current_streak: newStreak,
@@ -439,7 +451,7 @@ Exemplos:
 
 Frase: "${message}"`;
 
-  const aiResponse = await chat(prompt);
+  const aiResponse = await chat([{ role: "user", content: prompt }], "Voce extrai dados de transacoes recorrentes. Responda APENAS com JSON valido.");
   let parsed: any;
   try {
     const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
@@ -846,7 +858,7 @@ async function handleFinanceReport(
       const catEmojis: Record<string, string> = { alimentacao: "🍔", transporte: "🚗", moradia: "🏠", saude: "💊", lazer: "🎮", educacao: "📚", trabalho: "💼", outros: "📦" };
 
       if (cats.length === 0) {
-        return `📊 Nenhum gasto registrado para *${periodLabel}* ainda.`;
+        return { text: `📊 Nenhum gasto registrado para *${periodLabel}* ainda.`, chartUrl: null };
       }
       const catList = cats.map((c) => `${catEmojis[c] ?? "📌"} ${c}`).join(", ");
       return { text: `📊 Não encontrei gastos com *${filterCategory}* em *${periodLabel}*.\n\nCategorias que você tem registros: ${catList}`, chartUrl: null };
@@ -4032,9 +4044,9 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
     } else if (intent === "recurring_create") {
       responseText = await handleRecurringCreate(profile.id, text);
     } else if (intent === "habit_create") {
-      responseText = await handleHabitCreate(profile.id, sendPhone || replyTo, text);
+      responseText = await handleHabitCreate(profile.id, sendPhone || replyTo, text, userTz);
     } else if (intent === "habit_checkin") {
-      responseText = await handleHabitCheckin(profile.id, text);
+      responseText = await handleHabitCheckin(profile.id, text, userTz);
     } else if (intent === "finance_record") {
       responseText = await handleFinanceRecord(profile.id, sendPhone || replyTo, text, config);
     } else if (intent === "finance_report") {
@@ -4137,7 +4149,10 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
     );
 
     // 9. Salva mensagens na conversa
-    await saveConversation(profile.id, lid, sendPhone, pushName, text, responseText, intent);
+    // Pula registro de conversa quando responseText esta vazio (botoes interativos ja enviados pelo handler)
+    if (responseText) {
+      await saveConversation(profile.id, lid, sendPhone, pushName, text, responseText, intent);
+    }
 
     // 10. Incrementa contador de mensagens
     await supabase
@@ -4160,9 +4175,12 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
       phone_number: replyTo.replace(/@.*$/, ""),
       metadata: { lid, messageId },
     });
-    // Registra metrica de erro se temos profile
+    // Registra metrica de erro se temos profile (busca por phone_number, nao por id)
     try {
-      const { data: pErr } = await supabase.from("profiles").select("id").eq("id", replyTo.replace(/@.*$/, "")).maybeSingle();
+      const errPhone = replyTo.replace(/@.*$/, "").replace(/:\d+$/, "");
+      const { data: pErr } = await supabase.from("profiles").select("id")
+        .or(`phone_number.eq.${errPhone},phone_number.eq.+${errPhone}`)
+        .maybeSingle();
       if (pErr?.id) logMetric(pErr.id, currentIntent || "unknown", Date.now() - t0, false, message.slice(0, 100)).catch(() => {});
     } catch { /* ignora */ }
     try {

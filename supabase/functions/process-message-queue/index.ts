@@ -75,10 +75,8 @@ serve(async (req) => {
         failed++;
         console.warn(`[process-message-queue] Permanently failed ${msg.id} after ${newAttempts} attempts`);
       } else {
-        // Exponential backoff: attempt 1 → 5^1 = 5 min, attempt 2 → 5^2 = 25 min
-        // (after attempt 0 the first retry happens immediately via next_attempt_at=now(),
-        //  so effective schedule: failure → +5min → +25min → failed)
-        const backoffMinutes = Math.pow(5, newAttempts);
+        // Capped exponential backoff: 1 min → 5 min → 15 min (max 30 min)
+        const backoffMinutes = Math.min(Math.pow(3, newAttempts), 30);
         const nextAttempt = new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString();
 
         await supabase
