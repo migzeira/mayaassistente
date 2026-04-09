@@ -649,7 +649,7 @@ function PricingSection() {
                 ))}
               </div>
 
-              <Button size="lg" asChild className="w-full group relative overflow-hidden bg-gradient-to-r from-violet-600 via-purple-600 to-violet-600 bg-[length:200%_100%] animate-shimmer-slow hover:shadow-violet-500/50 text-white h-14 rounded-xl shadow-xl shadow-violet-500/30 hover:-translate-y-0.5 transition-all duration-300 font-bold text-[16px] border border-violet-400/20">
+              <Button size="lg" asChild className="w-full group relative overflow-hidden bg-gradient-to-r from-violet-600 via-purple-600 to-violet-600 bg-[length:200%_100%] md:animate-shimmer-slow hover:shadow-violet-500/50 text-white h-14 rounded-xl shadow-xl shadow-violet-500/30 hover:-translate-y-0.5 transition-all duration-300 font-bold text-[16px] border border-violet-400/20">
                 <a href={link} target="_blank" rel="noreferrer">
                   <span className="relative z-10 flex items-center gap-2">
                     Começar agora
@@ -1259,7 +1259,7 @@ export default function Index() {
                   Mais de 1.200 pessoas já organizam finanças, agenda e lembretes direto pelo WhatsApp. Começa agora.
                 </p>
                 <Button size="lg" asChild
-                  className="group relative overflow-hidden bg-gradient-to-r from-violet-600 via-purple-600 to-violet-600 bg-[length:200%_100%] animate-shimmer-slow text-white h-13 px-6 sm:px-10 rounded-xl shadow-xl shadow-violet-500/30 hover:shadow-violet-500/50 hover:-translate-y-0.5 transition-all duration-300 font-bold text-[14px] sm:text-[16px] border border-violet-400/20">
+                  className="group relative overflow-hidden bg-gradient-to-r from-violet-600 via-purple-600 to-violet-600 bg-[length:200%_100%] md:animate-shimmer-slow text-white h-13 px-6 sm:px-10 rounded-xl shadow-xl shadow-violet-500/30 hover:shadow-violet-500/50 hover:-translate-y-0.5 transition-all duration-300 font-bold text-[14px] sm:text-[16px] border border-violet-400/20">
                   <a href="https://pay.kirvano.com/4a308234-3702-4233-9d2a-4dce73bf0d2b" target="_blank" rel="noreferrer">
                     <span className="relative z-10 flex items-center gap-2">
                       Começar por R$29,90
