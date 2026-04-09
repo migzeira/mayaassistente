@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Plus, Trash2, UserCircle2, Search, Phone } from "lucide-react";
+import { Plus, Trash2, UserCircle2, Search, Phone, Pencil, Check, X } from "lucide-react";
 
 interface Contact {
   id: string;
@@ -30,26 +30,79 @@ export default function Contatos() {
   const [newNotes, setNewNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (user) load();
-  }, [user]);
+  // Inline edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Load & realtime ──────────────────────────────────────────────────────
 
   const load = async () => {
+    if (!user) return;
     setLoading(true);
     const { data, error } = await supabase
       .from("contacts")
       .select("*")
-      .eq("user_id", user!.id)
+      .eq("user_id", user.id)
       .order("name");
     if (error) toast.error("Erro ao carregar contatos");
     else setContacts(data ?? []);
     setLoading(false);
   };
 
+  useEffect(() => {
+    if (user) load();
+  }, [user]);
+
+  // Realtime: aparece na tela imediatamente quando Maya salva pelo WhatsApp
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel(`contacts:${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "contacts",
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            const c = payload.new as Contact;
+            setContacts(prev => {
+              if (prev.some(x => x.id === c.id)) return prev;
+              const updated = [...prev, c];
+              updated.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+              return updated;
+            });
+          } else if (payload.eventType === "UPDATE") {
+            const c = payload.new as Contact;
+            setContacts(prev => prev.map(x => x.id === c.id ? c : x));
+          } else if (payload.eventType === "DELETE") {
+            setContacts(prev => prev.filter(x => x.id !== payload.old?.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
+
+  // Auto-focus inline edit input
+  useEffect(() => {
+    if (editingId && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [editingId]);
+
+  // ── Handlers ─────────────────────────────────────────────────────────────
+
   const handleAdd = async () => {
     if (!newName.trim() || !newPhone.trim()) return;
     setSaving(true);
-    // Normaliza telefone
     let phone = newPhone.replace(/\D/g, "");
     if (!phone.startsWith("55") && phone.length <= 11) phone = `55${phone}`;
 
@@ -64,6 +117,7 @@ export default function Contatos() {
       toast.success("Contato adicionado!");
       setAdding(false);
       setNewName(""); setNewPhone(""); setNewNotes("");
+      // Realtime will update the list automatically; load() as fallback
       load();
     }
   };
@@ -77,6 +131,41 @@ export default function Contatos() {
     }
   };
 
+  const startEdit = (c: Contact) => {
+    setEditingId(c.id);
+    setEditName(c.name);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditName("");
+  };
+
+  const saveEdit = async (id: string) => {
+    const trimmed = editName.trim();
+    if (!trimmed) { toast.error("Nome não pode estar vazio"); return; }
+
+    const { error } = await supabase
+      .from("contacts")
+      .update({ name: trimmed })
+      .eq("id", id);
+
+    if (error) {
+      toast.error("Erro ao atualizar nome");
+    } else {
+      setContacts(prev => prev.map(c => c.id === id ? { ...c, name: trimmed } : c));
+      toast.success("Nome atualizado! 🙌");
+      setEditingId(null);
+    }
+  };
+
+  const handleEditKeyDown = (e: React.KeyboardEvent, id: string) => {
+    if (e.key === "Enter") saveEdit(id);
+    if (e.key === "Escape") cancelEdit();
+  };
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
   const filtered = contacts.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     c.phone.includes(search)
@@ -84,14 +173,14 @@ export default function Contatos() {
 
   const formatPhone = (phone: string) => {
     const n = phone.replace(/\D/g, "");
-    if (n.startsWith("55") && n.length === 13) {
+    if (n.startsWith("55") && n.length === 13)
       return `+55 (${n.slice(2, 4)}) ${n.slice(4, 9)}-${n.slice(9)}`;
-    }
-    if (n.startsWith("55") && n.length === 12) {
+    if (n.startsWith("55") && n.length === 12)
       return `+55 (${n.slice(2, 4)}) ${n.slice(4, 8)}-${n.slice(8)}`;
-    }
     return phone;
   };
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -113,7 +202,8 @@ export default function Contatos() {
       </div>
 
       <p className="text-sm text-muted-foreground">
-        Compartilhe um contato do WhatsApp com a Maya e ela salva automaticamente aqui. Depois é só pedir: <em>"Marca reunião com [Nome]"</em> ou <em>"Manda mensagem pra [Nome] dizendo..."</em>
+        Compartilhe um contato do WhatsApp com a Maya e ela salva automaticamente aqui — em tempo real. Depois é só pedir:{" "}
+        <em>"Marca reunião com [Nome]"</em> ou <em>"Manda mensagem pra [Nome] dizendo..."</em>
       </p>
 
       {adding && (
@@ -181,8 +271,44 @@ export default function Contatos() {
                       {c.name.charAt(0).toUpperCase()}
                     </span>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{c.name}</p>
+                  <div className="min-w-0 flex-1">
+                    {/* Inline name edit */}
+                    {editingId === c.id ? (
+                      <div className="flex items-center gap-1.5">
+                        <Input
+                          ref={editInputRef}
+                          value={editName}
+                          onChange={e => setEditName(e.target.value)}
+                          onKeyDown={e => handleEditKeyDown(e, c.id)}
+                          className="h-7 text-sm py-0 px-2 w-full max-w-[200px]"
+                        />
+                        <button
+                          onClick={() => saveEdit(c.id)}
+                          className="p-1 rounded-md text-emerald-500 hover:bg-emerald-500/10 transition-colors"
+                          title="Salvar"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          className="p-1 rounded-md text-muted-foreground hover:bg-muted transition-colors"
+                          title="Cancelar"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 group/name">
+                        <p className="text-sm font-medium truncate">{c.name}</p>
+                        <button
+                          onClick={() => startEdit(c)}
+                          className="opacity-0 group-hover/name:opacity-100 p-0.5 rounded hover:bg-muted transition-all"
+                          title="Editar nome"
+                        >
+                          <Pencil className="h-3 w-3 text-muted-foreground" />
+                        </button>
+                      </div>
+                    )}
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <Phone className="h-3 w-3 flex-shrink-0" />
                       <span className="font-mono">{formatPhone(c.phone)}</span>

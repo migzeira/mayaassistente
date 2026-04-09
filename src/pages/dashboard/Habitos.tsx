@@ -661,34 +661,6 @@ export default function Habitos() {
     return [];
   }
 
-  // ── Check-in ─────────────────────────────────
-  const checkIn = async (habitId: string) => {
-    const alreadyLogged = logs.some(l => l.habit_id === habitId && l.logged_date === today);
-    if (alreadyLogged) { toast.info("Já registrado hoje!"); return; }
-
-    const { error } = await (supabase.from("habit_logs" as any).insert({
-      habit_id: habitId, user_id: user!.id, logged_date: today,
-    } as any) as any);
-
-    if (error) {
-      if (error.code === "23505") toast.info("Já registrado hoje!");
-      else toast.error("Erro ao registrar");
-      return;
-    }
-
-    const habit = habits.find(h => h.id === habitId);
-    if (habit) {
-      const newStreak = habit.current_streak + 1;
-      await (supabase.from("habits" as any).update({
-        current_streak: newStreak,
-        best_streak: Math.max(newStreak, habit.best_streak),
-      } as any).eq("id", habitId) as any);
-    }
-
-    toast.success("Check-in feito! 🔥 Continue assim!");
-    loadData();
-  };
-
   // ── Custom habit ──────────────────────────────
   const handleSaveCustom = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -887,25 +859,23 @@ export default function Habitos() {
                   <p className="text-[10px] text-muted-foreground leading-snug line-clamp-2">{preset.desc}</p>
                 )}
 
-                {/* Active: streak + check-in */}
+                {/* Active: streak + today status (check-in happens via WhatsApp) */}
                 {isActive && activeHabit && (
-                  <div className="mt-2 space-y-1.5">
+                  <div className="mt-2 space-y-1">
                     {activeHabit.current_streak > 0 && (
                       <div className="flex items-center gap-1">
                         <Flame className="h-3 w-3 text-orange-500" />
                         <span className="text-[11px] font-medium">{activeHabit.current_streak} dias</span>
                       </div>
                     )}
-                    <Button
-                      size="sm"
-                      variant={todayDone ? "secondary" : "default"}
-                      disabled={todayDone}
-                      onClick={() => checkIn(activeHabit.id)}
-                      className="w-full h-7 text-xs"
-                      style={!todayDone ? { backgroundColor: preset.color, color: "#fff", border: "none" } : {}}
-                    >
-                      {todayDone ? <><CheckCircle2 className="h-3 w-3 mr-1" /> Feito</> : <><Target className="h-3 w-3 mr-1" /> Check-in</>}
-                    </Button>
+                    {todayDone ? (
+                      <div className="flex items-center gap-1 text-emerald-500">
+                        <CheckCircle2 className="h-3 w-3" />
+                        <span className="text-[11px] font-medium">Feito hoje ✅</span>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-muted-foreground">Aguardando lembrete 🔔</p>
+                    )}
                   </div>
                 )}
               </div>
@@ -992,15 +962,17 @@ export default function Habitos() {
                       })}
                     </div>
 
-                    <Button
-                      size="sm"
-                      variant={todayDone ? "secondary" : "default"}
-                      disabled={todayDone || !h.is_active}
-                      onClick={() => checkIn(h.id)}
-                      className="w-full"
-                    >
-                      {todayDone ? <><CheckCircle2 className="h-4 w-4 mr-1" /> Feito hoje</> : <><Target className="h-4 w-4 mr-1" /> Fazer check-in</>}
-                    </Button>
+                    {/* Check-in acontece via WhatsApp — exibe apenas status */}
+                    {todayDone ? (
+                      <div className="flex items-center justify-center gap-1.5 py-2 rounded-lg bg-emerald-500/10 text-emerald-500 text-sm font-medium">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Feito hoje ✅
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center gap-1.5 py-2 rounded-lg bg-muted text-muted-foreground text-sm">
+                        🔔 Aguardando lembrete
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               );

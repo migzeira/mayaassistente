@@ -65,6 +65,20 @@ serve(async (req) => {
     }
   }
 
+  // Limpeza de dedup atômico: remove entradas mais antigas que 48h
+  // (evita crescimento ilimitado da tabela processed_messages)
+  try {
+    const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+    const { count: cleaned } = await (supabase as any)
+      .from("processed_messages")
+      .delete()
+      .lt("created_at", cutoff)
+      .select("*", { count: "exact", head: true });
+    console.log(`[dedup-cleanup] Removed ${cleaned ?? 0} old processed_messages entries`);
+  } catch (e) {
+    console.warn("[dedup-cleanup] cleanup failed (non-fatal):", e);
+  }
+
   return new Response(JSON.stringify({ ok: true, processed }), {
     headers: { "Content-Type": "application/json" },
   });

@@ -2760,33 +2760,30 @@ serve(async (req) => {
     return new Response("OK");
   }
 
-  // Deduplicação: ignora se já processamos esse message ID recentemente
+  // ── Deduplicação atômica ─────────────────────────────────────────────────
+  // Usa INSERT com PRIMARY KEY para garantir que apenas UMA invocação processa
+  // o mesmo messageId, mesmo que o Evolution/Baileys dispare o webhook 2x
+  // simultaneamente (race condition que o antigo SELECT+UPSERT não cobria).
   const messageId = key?.id as string;
   if (messageId) {
-    const { data: existing } = await supabase
-      .from("whatsapp_sessions")
-      .select("last_processed_id")
-      .eq("last_processed_id", messageId)
-      .maybeSingle();
-    if (existing) {
-      return new Response("OK");
+    const { error: dedupErr } = await (supabase as any)
+      .from("processed_messages")
+      .insert({ message_id: messageId });
+
+    if (dedupErr) {
+      // Código 23505 = unique_violation → mensagem já foi processada
+      if (dedupErr.code === "23505") {
+        console.log("[dedup] messageId já processado, ignorando:", messageId);
+        return new Response("OK");
+      }
+      // Outro erro de DB — loga mas não bloqueia (evita perder mensagens)
+      console.warn("[dedup] erro ao inserir processed_message:", dedupErr.message);
     }
   }
 
   const remoteJid = key?.remoteJid as string;
   if (!remoteJid || remoteJid.endsWith("@g.us")) {
     return new Response("OK");
-  }
-
-  // Marca messageId como em processamento logo após o check — impede double-fire
-  // do Evolution/Baileys que às vezes entrega o mesmo evento duas vezes.
-  if (messageId) {
-    const dedupePhone = remoteJid.replace(/@.*$/, "");
-    // Fire-and-await: garante que a segunda invocação já veja o ID gravado
-    await supabase.from("whatsapp_sessions").upsert(
-      { phone_number: dedupePhone, last_processed_id: messageId, last_activity: new Date().toISOString() },
-      { onConflict: "phone_number" }
-    );
   }
 
   // ── Rate Limiting ────────────────────────────────────────────────────────
