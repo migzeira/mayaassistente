@@ -28,8 +28,10 @@ export type Database = {
           module_agenda: boolean
           module_chat: boolean
           module_finance: boolean
+          module_habits: boolean
           module_notes: boolean
           monthly_report: boolean
+          proactive_insights_enabled: boolean
           system_prompt: string | null
           template_event: string | null
           template_expense: string | null
@@ -55,8 +57,10 @@ export type Database = {
           module_agenda?: boolean
           module_chat?: boolean
           module_finance?: boolean
+          module_habits?: boolean
           module_notes?: boolean
           monthly_report?: boolean
+          proactive_insights_enabled?: boolean
           system_prompt?: string | null
           template_event?: string | null
           template_expense?: string | null
@@ -82,8 +86,10 @@ export type Database = {
           module_agenda?: boolean
           module_chat?: boolean
           module_finance?: boolean
+          module_habits?: boolean
           module_notes?: boolean
           monthly_report?: boolean
+          proactive_insights_enabled?: boolean
           system_prompt?: string | null
           template_event?: string | null
           template_expense?: string | null
@@ -123,6 +129,91 @@ export type Database = {
           value?: string
         }
         Relationships: []
+      }
+      bot_metrics: {
+        Row: {
+          created_at: string
+          error_type: string | null
+          id: string
+          intent: string
+          message_length: number | null
+          processing_time_ms: number | null
+          success: boolean
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          error_type?: string | null
+          id?: string
+          intent?: string
+          message_length?: number | null
+          processing_time_ms?: number | null
+          success?: boolean
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          error_type?: string | null
+          id?: string
+          intent?: string
+          message_length?: number | null
+          processing_time_ms?: number | null
+          success?: boolean
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_metrics_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      budgets: {
+        Row: {
+          alert_at_percent: number
+          amount_limit: number
+          category: string
+          created_at: string
+          id: string
+          last_alert_date: string | null
+          period: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          alert_at_percent?: number
+          amount_limit: number
+          category?: string
+          created_at?: string
+          id?: string
+          last_alert_date?: string | null
+          period?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          alert_at_percent?: number
+          amount_limit?: number
+          category?: string
+          created_at?: string
+          id?: string
+          last_alert_date?: string | null
+          period?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budgets_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       categories: {
         Row: {
@@ -328,6 +419,110 @@ export type Database = {
           },
         ]
       }
+      habit_logs: {
+        Row: {
+          habit_id: string
+          id: string
+          logged_at: string
+          logged_date: string
+          note: string | null
+          user_id: string
+        }
+        Insert: {
+          habit_id: string
+          id?: string
+          logged_at?: string
+          logged_date?: string
+          note?: string | null
+          user_id: string
+        }
+        Update: {
+          habit_id?: string
+          id?: string
+          logged_at?: string
+          logged_date?: string
+          note?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "habit_logs_habit_id_fkey"
+            columns: ["habit_id"]
+            isOneToOne: false
+            referencedRelation: "habits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "habit_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      habits: {
+        Row: {
+          best_streak: number
+          color: string
+          created_at: string
+          current_streak: number
+          description: string | null
+          frequency: string
+          icon: string
+          id: string
+          is_active: boolean
+          name: string
+          reminder_times: Json
+          target_days: Json
+          times_per_day: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          best_streak?: number
+          color?: string
+          created_at?: string
+          current_streak?: number
+          description?: string | null
+          frequency?: string
+          icon?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          reminder_times?: Json
+          target_days?: Json
+          times_per_day?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          best_streak?: number
+          color?: string
+          created_at?: string
+          current_streak?: number
+          description?: string | null
+          frequency?: string
+          icon?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          reminder_times?: Json
+          target_days?: Json
+          times_per_day?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "habits_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integrations: {
         Row: {
           access_token: string | null
@@ -472,6 +667,59 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "kirvano_payments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_queue: {
+        Row: {
+          attempts: number
+          content: string
+          created_at: string
+          id: string
+          last_error: string | null
+          max_attempts: number
+          message_type: string
+          next_attempt_at: string
+          phone: string
+          sent_at: string | null
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          attempts?: number
+          content: string
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          max_attempts?: number
+          message_type?: string
+          next_attempt_at?: string
+          phone: string
+          sent_at?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          attempts?: number
+          content?: string
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          max_attempts?: number
+          message_type?: string
+          next_attempt_at?: string
+          phone?: string
+          sent_at?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_queue_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
