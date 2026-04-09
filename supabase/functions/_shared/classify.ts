@@ -28,6 +28,9 @@ export type Intent =
   | "reminder_snooze"
   | "event_followup"
   | "statement_import"
+  | "shadow_finance_confirm"
+  | "shadow_event_confirm"
+  | "shadow_reminder_confirm"
   | "ai_chat";
 
 export function classifyIntent(msg: string): Intent {

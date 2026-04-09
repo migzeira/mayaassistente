@@ -14,9 +14,11 @@ import {
   extractReceiptFromImage,
   extractStatementFromImage,
   parseReminderIntent,
+  analyzeForwardedContent,
   type ChatMessage,
   type ExtractedEvent,
   type StatementExtraction,
+  type ShadowAnalysis,
 } from "../_shared/openai.ts";
 import { logError, fromThrown } from "../_shared/logger.ts";
 import { type Intent, classifyIntent, isReminderDecline, isReminderAtTime, isReminderAccept, parseMinutes } from "../_shared/classify.ts";
@@ -2800,16 +2802,29 @@ serve(async (req) => {
   const buttonResp = messageData?.buttonsResponseMessage as Record<string, unknown> | undefined;
   const buttonId = buttonResp?.selectedButtonId as string | undefined;
 
+  const extTextMsg = messageData?.extendedTextMessage as Record<string, unknown> | undefined;
   const text =
     (buttonId ? `BUTTON:${buttonId}` : null) ||
     (messageData?.conversation as string) ||
-    (messageData?.extendedTextMessage as Record<string, unknown>)?.text as string;
+    (extTextMsg?.text as string);
 
   const pushName = (data?.pushName as string) || "";
 
+  // ─── Detecção de mensagem encaminhada (Modo Sombra) ──────────────────────
+  const imgMsg = messageData?.imageMessage as Record<string, unknown> | undefined;
+  const audioMsgRaw = (messageData?.audioMessage ?? messageData?.pttMessage) as Record<string, unknown> | undefined;
+  const docMsg = messageData?.documentMessage as Record<string, unknown> | undefined;
+
+  const ctxInfo =
+    (extTextMsg?.contextInfo as Record<string, unknown>) ??
+    (imgMsg?.contextInfo as Record<string, unknown>) ??
+    (audioMsgRaw?.contextInfo as Record<string, unknown>) ??
+    (docMsg?.contextInfo as Record<string, unknown>);
+
+  const isForwarded = !!(ctxInfo?.isForwarded) || ((ctxInfo?.forwardingScore as number ?? 0) > 0);
+
   // ─── Áudio (ptt = push-to-talk / audioMessage) ───────────────────────────
-  const audioMsg = messageData?.audioMessage ?? messageData?.pttMessage;
-  if (audioMsg) {
+  if (audioMsgRaw) {
     const media = await downloadMediaBase64(data);
     if (media) {
       let transcription = "";
@@ -2824,8 +2839,15 @@ serve(async (req) => {
         await sendText(replyTo, "⚠️ Não entendi o áudio. Pode repetir por texto?");
         return new Response("OK");
       }
-      // Envia texto transcrito limpo (sem prefixo) para processamento de intents.
-      // O prefixo [🎤 Áudio transcrito] quebrava regex com ^ (ex: notas, saudação).
+
+      // Se audio encaminhado → Modo Sombra: classificar via analyzeForwardedContent
+      if (isForwarded) {
+        const shadowResult = await handleShadowMode(replyTo, transcription, null, lid, messageId, pushName);
+        return new Response(JSON.stringify({ ok: true, shadow: true, debug: shadowResult }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
       const debugResult = await processMessage(replyTo, transcription, lid, messageId, pushName, transcription);
       return new Response(JSON.stringify({ ok: true, transcription, debug: debugResult }), {
         headers: { "Content-Type": "application/json" },
@@ -2837,12 +2859,11 @@ serve(async (req) => {
     return new Response("OK");
   }
 
-  // ─── Imagem (nota fiscal / recibo) ───────────────────────────────────────
-  const imageMsg = messageData?.imageMessage;
-  if (imageMsg) {
+  // ─── Imagem (nota fiscal / recibo / foto encaminhada) ────────────────────
+  if (imgMsg) {
     const media = await downloadMediaBase64(data);
     if (media) {
-      const debugResult = await processImageMessage(replyTo, media.base64, media.mimetype, lid, messageId, pushName);
+      const debugResult = await processImageMessage(replyTo, media.base64, media.mimetype, lid, messageId, pushName, isForwarded);
       return new Response(JSON.stringify({ ok: true, debug: debugResult }), {
         headers: { "Content-Type": "application/json" },
       });
@@ -2850,8 +2871,34 @@ serve(async (req) => {
     return new Response("OK");
   }
 
+  // ─── Documento (PDF / boleto) ────────────────────────────────────────────
+  if (docMsg) {
+    const debugResult = await handleDocumentMessage(replyTo, data, docMsg, lid, messageId, pushName, isForwarded);
+    return new Response(JSON.stringify({ ok: true, debug: debugResult }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   if (!text?.trim()) {
     return new Response("OK");
+  }
+
+  // ─── Modo Sombra: texto encaminhado ──────────────────────────────────────
+  if (isForwarded && text.trim()) {
+    // Se usuario encaminhou + digitou algo que classifyIntent reconhece → usa fluxo normal
+    const forwardedIntent = classifyIntent(text.trim());
+    if (forwardedIntent !== "ai_chat" && forwardedIntent !== "greeting") {
+      // Usuario deu comando explicito junto com o encaminhamento → fluxo normal
+      const debugResult = await processMessage(replyTo, text.trim(), lid, messageId, pushName);
+      return new Response(JSON.stringify({ ok: true, debug: debugResult }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    // Texto encaminhado puro → Modo Sombra
+    const shadowResult = await handleShadowMode(replyTo, text.trim(), null, lid, messageId, pushName);
+    return new Response(JSON.stringify({ ok: true, shadow: true, debug: shadowResult }), {
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   // Processa e responde (síncrono para garantir execução)
@@ -3457,6 +3504,266 @@ async function handleEventFollowup(
 // STATEMENT IMPORT HELPERS — Feature #15
 // ─────────────────────────────────────────────
 
+// ─────────────────────────────────────────────
+// MODO SOMBRA: handlers para mensagens encaminhadas
+// ─────────────────────────────────────────────
+
+/**
+ * Resolve perfil do usuario a partir de replyTo e lid.
+ * Reutiliza o padrao multi-fallback (LID → phone → phone com +).
+ */
+async function resolveProfileForShadow(
+  replyTo: string,
+  lid: string | null
+): Promise<{
+  profile: { id: string; phone_number: string; timezone: string | null } | null;
+  sendPhone: string;
+}> {
+  const phone = replyTo.replace(/@s\.whatsapp\.net$/, "").replace(/@lid$/, "").replace(/:\d+$/, "");
+  let profile: { id: string; phone_number: string; timezone: string | null } | null = null;
+
+  if (lid) {
+    const { data } = await supabase.from("profiles").select("id, phone_number, timezone").eq("whatsapp_lid", lid).maybeSingle();
+    profile = data;
+  }
+  if (!profile) {
+    const { data } = await supabase.from("profiles").select("id, phone_number, timezone")
+      .or(`phone_number.eq.${phone},phone_number.eq.+${phone}`).maybeSingle();
+    profile = data;
+  }
+
+  const sendPhone = profile?.phone_number?.replace(/\D/g, "") || phone;
+  return { profile, sendPhone };
+}
+
+/**
+ * Handler principal do Modo Sombra.
+ * Classifica conteudo textual encaminhado e roteia para a acao correta.
+ */
+async function handleShadowMode(
+  replyTo: string,
+  content: string,
+  base64Media: string | null,
+  lid: string | null,
+  messageId: string | undefined,
+  pushName: string
+): Promise<string[]> {
+  const log: string[] = ["shadow_mode"];
+
+  try {
+    const { profile, sendPhone } = await resolveProfileForShadow(replyTo, lid);
+    if (!profile) { log.push("unknown_profile"); return log; }
+
+    const { data: config } = await supabase.from("agent_configs").select("*").eq("user_id", profile.id).maybeSingle();
+    if (config?.is_active === false) { log.push("agent_inactive"); return log; }
+
+    // Verifica se ha sessao pendente — shadow mode NAO interrompe fluxos em andamento
+    const sessionId = profile.phone_number?.replace(/\D/g, "") || "";
+    const { data: session } = await supabase.from("whatsapp_sessions").select("pending_action")
+      .eq("phone_number", sessionId).maybeSingle();
+    if (session?.pending_action) {
+      log.push("pending_session_active");
+      // Redireciona para processMessage normal para manter fluxo
+      await processMessage(replyTo, content, lid, messageId, pushName);
+      return log;
+    }
+
+    const moduleFinance = config?.module_finance !== false;
+    const moduleAgenda = config?.module_agenda !== false;
+    const moduleNotes = config?.module_notes !== false;
+    const userTz = profile.timezone || "America/Sao_Paulo";
+    const today = new Date().toLocaleDateString("sv-SE", { timeZone: userTz });
+
+    // Textos muito curtos → nota automatica (sem gastar API)
+    if (content.length < 10) {
+      if (moduleNotes) {
+        await supabase.from("notes").insert({
+          user_id: profile.id, title: content.slice(0, 50), content, source: "whatsapp_forward",
+        });
+        await sendText(sendPhone || replyTo, `📝 Anotei: "${content}" [📨 encaminhado]`);
+      }
+      log.push("short_text_note");
+      return log;
+    }
+
+    // Regex pre-filter: textos claramente financeiros (economiza API call)
+    const financialPattern = /R\$\s?\d|pix|transfer[eê]ncia|comprovante|boleto|pagamento.*confirm|valor\s*:?\s*R?\$?\s*\d/i;
+    let analysis: ShadowAnalysis;
+
+    if (financialPattern.test(content)) {
+      // Alta probabilidade financeira → ainda usa API para extrair dados precisos
+      analysis = await analyzeForwardedContent(content, today, userTz);
+      if (analysis.action === "unknown") analysis = { action: "finance_record", confidence: 0.6, data: {} };
+    } else {
+      analysis = await analyzeForwardedContent(content, today, userTz);
+    }
+
+    log.push(`classified: ${analysis.action} (${analysis.confidence})`);
+
+    // ── Roteamento por acao classificada ──
+    if (analysis.action === "finance_record" && analysis.confidence >= 0.7 && moduleFinance) {
+      const d = analysis.data;
+      const amount = d.amount ?? 0;
+
+      if (amount > 0) {
+        if (amount >= 1000) {
+          // Alto valor → confirma com botoes
+          await sendButtons(
+            sendPhone || replyTo,
+            "💸 Transação detectada",
+            `R$ ${fmtBRL(amount)} — ${d.description || "encaminhado"}\nRegistrar como ${d.type === "income" ? "receita" : "gasto"}?`,
+            [
+              { id: "SHADOW_FIN_YES", text: "✅ Registrar" },
+              { id: "SHADOW_FIN_NO",  text: "❌ Ignorar" },
+            ]
+          );
+          await supabase.from("whatsapp_sessions").upsert({
+            user_id: profile.id, phone_number: sessionId,
+            pending_action: "shadow_finance_confirm",
+            pending_context: { ...d, today },
+            last_activity: new Date().toISOString(), last_processed_id: messageId ?? null,
+          }, { onConflict: "phone_number" });
+          log.push("finance_high_value_confirm");
+        } else {
+          // Valor normal → auto-registra
+          await supabase.from("transactions").insert({
+            user_id: profile.id, type: d.type || "expense", amount,
+            category: d.category || "outros", description: d.description || "Encaminhado",
+            transaction_date: d.date || today, source: "whatsapp_forward",
+          });
+          const emoji = d.type === "income" ? "🟢" : "🔴";
+          const catEm = CATEGORY_EMOJI[d.category ?? "outros"] ?? "📦";
+          await sendText(sendPhone || replyTo, `${emoji} Registrei: R$ ${fmtBRL(amount)} — ${d.description || "encaminhado"} (${catEm} ${d.category || "outros"}) [📨 encaminhado]`);
+          log.push("finance_auto_saved");
+        }
+        return log;
+      }
+    }
+
+    if (analysis.action === "event_create" && analysis.confidence >= 0.6 && moduleAgenda) {
+      const d = analysis.data;
+      const dateLabel = d.event_date || "data indefinida";
+      const timeLabel = d.event_time || "";
+      await sendButtons(
+        sendPhone || replyTo,
+        "📅 Evento detectado!",
+        `*${d.title || "Compromisso"}*\n${dateLabel}${timeLabel ? " às " + timeLabel : ""}\n\nCriar na agenda?`,
+        [
+          { id: "SHADOW_EVT_YES",  text: "✅ Criar" },
+          { id: "SHADOW_EVT_NO",   text: "❌ Ignorar" },
+        ]
+      );
+      await supabase.from("whatsapp_sessions").upsert({
+        user_id: profile.id, phone_number: sessionId,
+        pending_action: "shadow_event_confirm",
+        pending_context: { title: d.title, date: d.event_date, time: d.event_time, duration: d.duration_minutes },
+        last_activity: new Date().toISOString(), last_processed_id: messageId ?? null,
+      }, { onConflict: "phone_number" });
+      log.push("event_confirm");
+      return log;
+    }
+
+    if (analysis.action === "reminder_create" && analysis.confidence >= 0.6 && moduleNotes) {
+      const d = analysis.data;
+      await sendButtons(
+        sendPhone || replyTo,
+        "⏰ Lembrete detectado!",
+        `*${d.reminder_title || "Lembrete"}*\nData: ${d.remind_at || "indefinida"}\n\nCriar lembrete?`,
+        [
+          { id: "SHADOW_REM_YES", text: "✅ Criar" },
+          { id: "SHADOW_REM_NO",  text: "❌ Ignorar" },
+        ]
+      );
+      await supabase.from("whatsapp_sessions").upsert({
+        user_id: profile.id, phone_number: sessionId,
+        pending_action: "shadow_reminder_confirm",
+        pending_context: { title: d.reminder_title, remind_at: d.remind_at },
+        last_activity: new Date().toISOString(), last_processed_id: messageId ?? null,
+      }, { onConflict: "phone_number" });
+      log.push("reminder_confirm");
+      return log;
+    }
+
+    // Default: salva como nota
+    if (moduleNotes) {
+      const noteTitle = analysis.data?.note_title || content.slice(0, 50);
+      const noteContent = analysis.data?.note_content || content;
+      await supabase.from("notes").insert({
+        user_id: profile.id, title: noteTitle, content: noteContent, source: "whatsapp_forward",
+      });
+      syncNotion(profile.id, noteContent).catch(() => {});
+      await sendText(sendPhone || replyTo, `📝 Anotei: "${noteTitle}" [📨 encaminhado]`);
+      log.push("note_saved");
+    }
+
+    return log;
+  } catch (err) {
+    console.error("[shadow_mode] Error:", err);
+    log.push(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
+    return log;
+  }
+}
+
+/**
+ * Handler para documentos (PDF, etc.) recebidos via WhatsApp.
+ */
+async function handleDocumentMessage(
+  replyTo: string,
+  data: Record<string, unknown>,
+  docMsg: Record<string, unknown>,
+  lid: string | null,
+  messageId: string | undefined,
+  pushName: string,
+  isForwarded: boolean
+): Promise<string[]> {
+  const log: string[] = ["document_processing"];
+  const mimetype = (docMsg.mimetype as string) || "";
+  const fileName = (docMsg.fileName as string) || "documento";
+
+  try {
+    const media = await downloadMediaBase64(data);
+    if (!media) {
+      log.push("download_failed");
+      return log;
+    }
+
+    // Se e imagem embutida → processa como imagem
+    if (mimetype.startsWith("image/")) {
+      return await processImageMessage(replyTo, media.base64, media.mimetype, lid, messageId, pushName, isForwarded) as string[];
+    }
+
+    // PDF: tenta processar como imagem via Vision (muitos PDFs de boleto sao scan)
+    if (mimetype === "application/pdf") {
+      // Tenta enviar ao Vision como se fosse imagem (funciona para PDFs de pagina unica)
+      try {
+        const result = await processImageMessage(replyTo, media.base64, "image/png", lid, messageId, pushName, isForwarded) as string[];
+        if (result.includes("single_tx_saved") || result.includes("preview_sent")) {
+          return result; // Deu certo via Vision
+        }
+      } catch { /* Falhou como imagem — salva como nota */ }
+    }
+
+    // Fallback: salva como nota com metadata
+    const { profile } = await resolveProfileForShadow(replyTo, lid);
+    if (profile) {
+      await supabase.from("notes").insert({
+        user_id: profile.id,
+        title: fileName,
+        content: `Documento recebido: ${fileName}\nTipo: ${mimetype}\nRecebido em: ${new Date().toISOString()}`,
+        source: isForwarded ? "whatsapp_forward" : "whatsapp",
+      });
+      const fwdLabel = isForwarded ? " [📨 encaminhado]" : "";
+      await sendText(profile.phone_number ?? replyTo, `📄 Recebi "${fileName}" — salvei como anotação.${fwdLabel}`);
+    }
+    log.push("saved_as_note");
+    return log;
+  } catch (err) {
+    console.error("[document_processing] Error:", err);
+    log.push(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
+    return log;
+  }
+}
+
 const CATEGORY_EMOJI: Record<string, string> = {
   alimentacao: "🍔",
   transporte: "🚗",
@@ -3572,9 +3879,11 @@ async function processImageMessage(
   mimetype: string,
   lid: string | null,
   messageId: string | undefined,
-  pushName: string
+  pushName: string,
+  isForwarded = false
 ): Promise<unknown> {
   const log: string[] = ["image_processing"];
+  if (isForwarded) log.push("forwarded");
   try {
     // 1. Extract using smart statement analysis
     const extraction = await extractStatementFromImage(base64, mimetype);
@@ -3586,6 +3895,18 @@ async function processImageMessage(
     // 3. Unknown or no transactions
     if (extraction.document_type === "unknown" || extraction.transactions.length === 0) {
       log.push("not_a_financial_doc");
+      // Se encaminhada e nao financeira → salva como nota silenciosa
+      if (isForwarded) {
+        const { data: pf } = await supabase.from("profiles").select("id, phone_number")
+          .or(`phone_number.eq.${phone},phone_number.eq.+${phone}`).maybeSingle();
+        if (pf) {
+          await supabase.from("notes").insert({
+            user_id: pf.id, title: "Imagem encaminhada", content: "[Imagem recebida via encaminhamento — não identificada como documento financeiro]", source: "whatsapp_forward",
+          });
+          await sendText(pf.phone_number ?? replyTo, "📷 Recebi a imagem encaminhada — salvei como anotação. [📨 encaminhado]");
+        }
+        return log;
+      }
       const { data: profileBasic } = await supabase
         .from("profiles")
         .select("phone_number")
@@ -4107,6 +4428,76 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
       responseText = stmtResult.response;
       pendingAction = stmtResult.pendingAction;
       pendingContext = stmtResult.pendingContext;
+
+    } else if (intent === "shadow_finance_confirm") {
+      const ctx = (session?.pending_context ?? {}) as Record<string, unknown>;
+      const msgLow = text.toLowerCase();
+      if (text === "BUTTON:SHADOW_FIN_YES" || /^(sim|confirmar|registrar|ok)\b/.test(msgLow)) {
+        const txDate = (ctx.date as string) || new Date().toLocaleDateString("sv-SE", { timeZone: userTz });
+        await supabase.from("transactions").insert({
+          user_id: profile.id,
+          type: ctx.type || "expense",
+          amount: ctx.amount,
+          category: ctx.category || "outros",
+          description: ctx.description || "Encaminhado",
+          transaction_date: txDate,
+          source: "whatsapp_forward",
+        });
+        const emoji = ctx.type === "income" ? "🟢" : "🔴";
+        const catEm = CATEGORY_EMOJI[(ctx.category as string) ?? "outros"] ?? "📦";
+        responseText = `${emoji} Registrado: R$ ${fmtBRL(ctx.amount as number)} — ${ctx.description || "encaminhado"} (${catEm} ${ctx.category || "outros"}) [📨 encaminhado]`;
+      } else {
+        responseText = "Ok, ignorei essa transação. 🗑️";
+      }
+      pendingAction = undefined;
+      pendingContext = undefined;
+
+    } else if (intent === "shadow_event_confirm") {
+      const ctx = (session?.pending_context ?? {}) as Record<string, unknown>;
+      const msgLow = text.toLowerCase();
+      if (text === "BUTTON:SHADOW_EVT_YES" || /^(sim|criar|confirmar|ok)\b/.test(msgLow)) {
+        await supabase.from("events").insert({
+          user_id: profile.id,
+          title: ctx.title || "Evento encaminhado",
+          event_date: ctx.date ?? null,
+          event_time: ctx.time ?? null,
+          status: "confirmed",
+          source: "whatsapp_forward",
+        });
+        const dateStr = ctx.date ? ` — ${ctx.date}` : "";
+        const timeStr = ctx.time ? ` às ${ctx.time}` : "";
+        responseText = `✅ Evento criado: *${ctx.title || "Evento encaminhado"}*${dateStr}${timeStr} [📨 encaminhado]`;
+        syncGoogleCalendar(profile.id, ctx.title as string, ctx.date as string, (ctx.time as string) ?? null).catch(() => {});
+      } else {
+        responseText = "Ok, ignorei o evento. 🗑️";
+      }
+      pendingAction = undefined;
+      pendingContext = undefined;
+
+    } else if (intent === "shadow_reminder_confirm") {
+      const ctx = (session?.pending_context ?? {}) as Record<string, unknown>;
+      const msgLow = text.toLowerCase();
+      if (text === "BUTTON:SHADOW_REM_YES" || /^(sim|criar|confirmar|ok)\b/.test(msgLow)) {
+        const remindAt = ctx.remind_at
+          ? new Date(ctx.remind_at as string)
+          : new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await supabase.from("reminders").insert({
+          user_id: profile.id,
+          whatsapp_number: sendPhone || replyTo,
+          title: (ctx.title as string) || "Lembrete encaminhado",
+          message: `🔔 *Lembrete!*\n${(ctx.title as string) || "Lembrete encaminhado"}`,
+          send_at: remindAt.toISOString(),
+          recurrence: "none",
+          source: "whatsapp_forward",
+          status: "pending",
+        });
+        responseText = `✅ Lembrete criado: *${ctx.title || "Lembrete encaminhado"}* [📨 encaminhado]`;
+      } else {
+        responseText = "Ok, ignorei o lembrete. 🗑️";
+      }
+      pendingAction = undefined;
+      pendingContext = undefined;
+
     } else {
       // Chat geral com IA (moduleChat já verificado acima via moduleActive)
       // Informa à IA quais módulos estão ativos/inativos para consistência

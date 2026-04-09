@@ -423,6 +423,90 @@ Retorne SOMENTE este JSON (sem markdown):
   }
 }
 
+// ─────────────────────────────────────────────
+// SHADOW MODE: Analise de conteudo encaminhado
+// ─────────────────────────────────────────────
+
+export interface ShadowAnalysis {
+  action: "finance_record" | "event_create" | "note_save" | "reminder_create" | "unknown";
+  confidence: number;
+  data: {
+    amount?: number;
+    description?: string;
+    type?: "expense" | "income";
+    category?: string;
+    date?: string;
+    title?: string;
+    event_date?: string;
+    event_time?: string;
+    duration_minutes?: number;
+    note_title?: string;
+    note_content?: string;
+    reminder_title?: string;
+    remind_at?: string;
+  };
+}
+
+/**
+ * Classifica conteudo de mensagem encaminhada usando Claude Haiku.
+ * Retorna acao recomendada + dados extraidos + nivel de confianca.
+ */
+export async function analyzeForwardedContent(
+  text: string,
+  today: string,
+  userTz = "America/Sao_Paulo"
+): Promise<ShadowAnalysis> {
+  const fallback: ShadowAnalysis = { action: "unknown", confidence: 0, data: {} };
+  if (!text || text.length < 3) return fallback;
+
+  const system = "Voce classifica mensagens encaminhadas no WhatsApp para uma assistente pessoal brasileira. Responda APENAS com JSON valido, sem markdown.";
+
+  const prompt = `Uma pessoa encaminhou esta mensagem para sua assistente pessoal Maya. Analise e classifique.
+
+Hoje: ${today}. Fuso: ${userTz}.
+
+MENSAGEM ENCAMINHADA:
+"${text.slice(0, 1500)}"
+
+Classifique como UMA acao:
+
+1. "finance_record" — Comprovante de PIX/TED/boleto, texto com valor monetario e contexto de pagamento/recebimento, cobranca ou fatura.
+   Extraia: amount (numero positivo), description (string), type ("expense"|"income"), category (alimentacao|transporte|moradia|saude|lazer|educacao|trabalho|outros), date (YYYY-MM-DD ou null)
+
+2. "event_create" — Alguem marcando reuniao/encontro/compromisso, referencia a data+hora especifica futura, convite.
+   Extraia: title (string curto), event_date (YYYY-MM-DD), event_time (HH:MM ou null), duration_minutes (ou null)
+
+3. "reminder_create" — Prazo/deadline ("entregar ate dia X", "vence dia X"), algo pra lembrar numa data.
+   Extraia: reminder_title (string curto), remind_at (YYYY-MM-DD ou YYYY-MM-DDTHH:MM)
+
+4. "note_save" — Informacao geral util (endereco, telefone, instrucoes, dados) que nao encaixa acima.
+   Extraia: note_title (string curto), note_content (conteudo limpo)
+
+5. "unknown" — Incompreensivel, muito curto ou irrelevante (sticker, emoji solo, "ok").
+
+Regras:
+- confidence: 0.0-1.0 (>= 0.8 se obvio, 0.5-0.7 se ambiguo)
+- Para finance: R$, reais, PIX, transferencia, boleto sao pistas fortes
+- Para event: "amanha as 14h", "sexta 10h", "dia 15 as 9h"
+- Se ambiguo entre note e finance (valor sem contexto de pagamento) → note
+- Se ambiguo entre event e reminder → event se tem horario, reminder se so data
+
+JSON:
+{"action":"...","confidence":0.0,"data":{...}}`;
+
+  try {
+    const result = await chat([{ role: "user", content: prompt }], system);
+    const jsonMatch = result.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return fallback;
+    const parsed = JSON.parse(jsonMatch[0]) as ShadowAnalysis;
+    if (!parsed.action) return fallback;
+    parsed.confidence = parsed.confidence ?? 0;
+    return parsed;
+  } catch {
+    return fallback;
+  }
+}
+
 /**
  * Analisa imagem com Claude Vision.
  * Se for nota fiscal/recibo, extrai transações. Retorna array vazio se não for.
