@@ -73,14 +73,16 @@ export async function sendButtons(
 
   const body = {
     number,
-    title,
-    description,
-    footer,
-    buttons: buttons.slice(0, 3).map(b => ({
-      type: "reply",
-      displayText: b.text,
-      id: b.id,
-    })),
+    buttonMessage: {
+      title,
+      description,
+      footer,
+      buttons: buttons.slice(0, 3).map(b => ({
+        type: "reply",
+        displayText: b.text,
+        id: b.id,
+      })),
+    },
   };
 
   await evolutionPost(`/message/sendButtons/${INSTANCE}`, body);
