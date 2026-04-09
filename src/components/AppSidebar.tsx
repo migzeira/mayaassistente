@@ -1,4 +1,4 @@
-import { Home, Wallet, CalendarDays, StickyNote, MessageSquare, Link2, Settings, User, LogOut, Shield, Bell, X, Zap, BarChart2, BookUser } from "lucide-react";
+import { Home, Wallet, CalendarDays, StickyNote, Link2, Settings, User, LogOut, Shield, Bell, X, Zap, BarChart2, BookUser } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import logoEscrita from "@/assets/logo_escrita.png";
 import logoIcon from "@/assets/logo_icon.png";
@@ -26,7 +26,6 @@ const menuItems = [
   { title: "Anotações", url: "/dashboard/anotacoes", icon: StickyNote },
   { title: "Hábitos", url: "/dashboard/habitos", icon: Zap },
   { title: "Contatos", url: "/dashboard/contatos", icon: BookUser },
-  { title: "Conversas", url: "/dashboard/conversas", icon: MessageSquare },
   { title: "Integrações", url: "/dashboard/integracoes", icon: Link2 },
   { title: "Analytics", url: "/dashboard/analytics", icon: BarChart2 },
   { title: "Config. do Agente", url: "/dashboard/agente", icon: Settings },

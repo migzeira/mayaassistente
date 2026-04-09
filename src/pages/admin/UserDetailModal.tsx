@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -6,11 +6,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { format, differenceInDays, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RefreshCw, MessageSquare, ArrowLeft, Bot, User } from "lucide-react";
 
 interface Props {
   userId: string;
@@ -33,9 +35,19 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
   const [notes, setNotes] = useState<any[]>([]);
   const [activatingDays, setActivatingDays] = useState("");
 
+  // Chat view state
+  const [selectedConv, setSelectedConv] = useState<any>(null);
+  const [convMessages, setConvMessages] = useState<any[]>([]);
+  const [loadingMsgs, setLoadingMsgs] = useState(false);
+
   useEffect(() => {
     if (open && userId) loadAll();
   }, [open, userId]);
+
+  // Reset chat selection when modal closes
+  useEffect(() => {
+    if (!open) { setSelectedConv(null); setConvMessages([]); }
+  }, [open]);
 
   const loadAll = async () => {
     setLoading(true);
@@ -57,13 +69,31 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
     setEvents(evRes.data || []);
     setReminders(remRes.data || []);
     setNotes(nRes.data || []);
-
-    if (cRes.data && cRes.data.length > 0) {
-      const convIds = cRes.data.map((c: any) => c.id);
-      const { data: msgs } = await supabase.from("messages").select("*").in("conversation_id", convIds).order("created_at", { ascending: false }).limit(100);
-      setMessages(msgs || []);
-    }
     setLoading(false);
+  };
+
+  const loadConvMessages = useCallback(async (conv: any) => {
+    setSelectedConv(conv);
+    setLoadingMsgs(true);
+    const { data } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("conversation_id", conv.id)
+      .order("created_at", { ascending: true });
+    setConvMessages(data || []);
+    setLoadingMsgs(false);
+  }, []);
+
+  const refreshConvMessages = async () => {
+    if (!selectedConv) return;
+    setLoadingMsgs(true);
+    const [{ data: msgs }, { data: updatedConv }] = await Promise.all([
+      supabase.from("messages").select("*").eq("conversation_id", selectedConv.id).order("created_at", { ascending: true }),
+      supabase.from("conversations").select("*").eq("id", selectedConv.id).maybeSingle(),
+    ]);
+    setConvMessages(msgs || []);
+    if (updatedConv) setSelectedConv(updatedConv);
+    setLoadingMsgs(false);
   };
 
   const fmt = (d: string | null) => {
@@ -84,7 +114,6 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
       account_status: "active",
       access_until: accessUntil,
     } as any).eq("id", userId) as any);
-    // Garante agente ativo
     await supabase.from("agent_configs").update({ is_active: true } as any).eq("user_id", userId);
     if (error) toast.error("Erro ao ativar");
     else {
@@ -116,7 +145,7 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             {userName}
@@ -142,8 +171,8 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
             {/* Summary bar */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
               <div className="bg-muted/50 rounded-lg p-3 text-center">
-                <p className="text-lg font-bold">{messages.length}</p>
-                <p className="text-xs text-muted-foreground">Mensagens</p>
+                <p className="text-lg font-bold">{conversations.length}</p>
+                <p className="text-xs text-muted-foreground">Conversas</p>
               </div>
               <div className="bg-muted/50 rounded-lg p-3 text-center">
                 <p className="text-lg font-bold">{transactions.length}</p>
@@ -167,7 +196,6 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
             <div className="mb-4 p-3 rounded-lg border border-border bg-muted/30 space-y-3">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ações administrativas</p>
 
-              {/* Ativar por período */}
               <div className="flex flex-wrap items-end gap-2">
                 <div className="space-y-1">
                   <Label className="text-xs">Ativar por N dias</Label>
@@ -195,7 +223,6 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
                 </div>
               </div>
 
-              {/* Status atual + ações rápidas */}
               <div className="flex flex-wrap gap-2 items-center pt-1 border-t border-border">
                 <span className="text-xs text-muted-foreground">Status atual:</span>
                 <Badge className={
@@ -229,8 +256,9 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
 
             <Tabs defaultValue="conversations">
               <TabsList className="mb-3 flex-wrap h-auto gap-1">
-                <TabsTrigger value="conversations">Conversas ({conversations.length})</TabsTrigger>
-                <TabsTrigger value="messages">Msgs ({messages.length})</TabsTrigger>
+                <TabsTrigger value="conversations">
+                  Conversas ({conversations.length})
+                </TabsTrigger>
                 <TabsTrigger value="transactions">Transações ({transactions.length})</TabsTrigger>
                 <TabsTrigger value="events">Agenda ({events.length})</TabsTrigger>
                 <TabsTrigger value="reminders">Lembretes ({reminders.length})</TabsTrigger>
@@ -239,40 +267,132 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
                 <TabsTrigger value="integrations">Integrações</TabsTrigger>
               </TabsList>
 
+              {/* ── CONVERSAS: full chat view ── */}
               <TabsContent value="conversations">
-                <Table>
-                  <TableHeader><TableRow>
-                    <TableHead>Contato</TableHead><TableHead>Telefone</TableHead><TableHead>Msgs</TableHead><TableHead>Último</TableHead>
-                  </TableRow></TableHeader>
-                  <TableBody>
-                    {conversations.map(c => (
-                      <TableRow key={c.id}>
-                        <TableCell>{c.contact_name || "—"}</TableCell>
-                        <TableCell className="text-sm">{c.phone_number}</TableCell>
-                        <TableCell>{c.message_count}</TableCell>
-                        <TableCell className="text-sm">{fmt(c.last_message_at)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TabsContent>
+                {!selectedConv ? (
+                  /* List of conversations */
+                  conversations.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
+                      <MessageSquare className="h-8 w-8 opacity-30" />
+                      <p className="text-sm">Nenhuma conversa ainda</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {conversations.map(c => (
+                        <button
+                          key={c.id}
+                          onClick={() => loadConvMessages(c)}
+                          className="w-full text-left p-3 rounded-lg border border-border bg-card hover:bg-accent/50 transition-colors group"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                                <User className="h-4 w-4 text-primary" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-medium text-sm truncate">
+                                  {c.contact_name || c.phone_number || "Desconhecido"}
+                                </p>
+                                <p className="text-xs text-muted-foreground font-mono">{c.phone_number}</p>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <Badge variant="secondary" className="text-xs mb-1">{c.message_count ?? 0} msgs</Badge>
+                              <p className="text-xs text-muted-foreground">{fmt(c.last_message_at)}</p>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                ) : (
+                  /* Chat view for selected conversation */
+                  <div className="flex flex-col gap-3">
+                    {/* Chat header */}
+                    <div className="flex items-center gap-2 pb-2 border-b border-border">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { setSelectedConv(null); setConvMessages([]); }}
+                        className="h-8 px-2 text-muted-foreground"
+                      >
+                        <ArrowLeft className="h-4 w-4 mr-1" /> Voltar
+                      </Button>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">
+                          {selectedConv.contact_name || selectedConv.phone_number || "Desconhecido"}
+                        </p>
+                        <p className="text-xs text-muted-foreground font-mono">{selectedConv.phone_number}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge variant="secondary" className="text-xs">{convMessages.length} msgs</Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={refreshConvMessages}
+                          disabled={loadingMsgs}
+                          className="h-8 w-8 p-0"
+                          title="Atualizar mensagens"
+                        >
+                          <RefreshCw className={`h-4 w-4 ${loadingMsgs ? "animate-spin" : ""}`} />
+                        </Button>
+                      </div>
+                    </div>
 
-              <TabsContent value="messages">
-                <Table>
-                  <TableHeader><TableRow>
-                    <TableHead>Data</TableHead><TableHead>Role</TableHead><TableHead>Intent</TableHead><TableHead>Mensagem</TableHead>
-                  </TableRow></TableHeader>
-                  <TableBody>
-                    {messages.map(m => (
-                      <TableRow key={m.id}>
-                        <TableCell className="text-sm whitespace-nowrap">{fmt(m.created_at)}</TableCell>
-                        <TableCell><Badge variant={m.role === "assistant" ? "default" : "secondary"}>{m.role}</Badge></TableCell>
-                        <TableCell className="text-sm">{m.intent || "—"}</TableCell>
-                        <TableCell className="text-sm max-w-sm truncate">{m.content?.substring(0, 100)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    {/* Messages */}
+                    <ScrollArea className="h-[380px] pr-2">
+                      {loadingMsgs ? (
+                        <div className="space-y-3 p-2">
+                          {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-3/4" />)}
+                        </div>
+                      ) : convMessages.length === 0 ? (
+                        <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
+                          Nenhuma mensagem nesta conversa
+                        </div>
+                      ) : (
+                        <div className="space-y-3 p-2">
+                          {convMessages.map(m => {
+                            const isAssistant = m.role === "assistant";
+                            return (
+                              <div
+                                key={m.id}
+                                className={`flex gap-2 ${isAssistant ? "flex-row" : "flex-row-reverse"}`}
+                              >
+                                {/* Avatar */}
+                                <div className={`h-7 w-7 rounded-full flex items-center justify-center shrink-0 mt-1 ${isAssistant ? "bg-primary/20" : "bg-muted"}`}>
+                                  {isAssistant
+                                    ? <Bot className="h-3.5 w-3.5 text-primary" />
+                                    : <User className="h-3.5 w-3.5 text-muted-foreground" />
+                                  }
+                                </div>
+                                {/* Bubble */}
+                                <div className={`max-w-[75%] space-y-0.5 ${isAssistant ? "" : "items-end flex flex-col"}`}>
+                                  <div className={`px-3 py-2 rounded-2xl text-sm leading-relaxed ${
+                                    isAssistant
+                                      ? "bg-primary/15 text-foreground rounded-tl-sm"
+                                      : "bg-muted text-foreground rounded-tr-sm"
+                                  }`}>
+                                    {m.content}
+                                  </div>
+                                  <div className={`flex items-center gap-2 px-1 ${isAssistant ? "" : "flex-row-reverse"}`}>
+                                    <span className="text-[10px] text-muted-foreground/60">
+                                      {fmt(m.created_at)}
+                                    </span>
+                                    {m.intent && (
+                                      <Badge variant="outline" className="text-[10px] h-4 px-1 py-0 font-normal opacity-60">
+                                        {m.intent}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="transactions">
@@ -292,6 +412,7 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
                     ))}
                   </TableBody>
                 </Table>
+                {transactions.length === 0 && <p className="text-muted-foreground text-center py-4">Nenhuma transação</p>}
               </TabsContent>
 
               <TabsContent value="events">

@@ -25,7 +25,6 @@ const DashboardHome = lazy(() => import("./pages/dashboard/DashboardHome"));
 const Financas = lazy(() => import("./pages/dashboard/Financas"));
 const Agenda = lazy(() => import("./pages/dashboard/Agenda"));
 const Anotacoes = lazy(() => import("./pages/dashboard/Anotacoes"));
-const Conversas = lazy(() => import("./pages/dashboard/Conversas"));
 const Lembretes = lazy(() => import("./pages/dashboard/Lembretes"));
 const Habitos = lazy(() => import("./pages/dashboard/Habitos"));
 const Integracoes = lazy(() => import("./pages/dashboard/Integracoes"));
@@ -72,7 +71,6 @@ const App = () => (
                 <Route path="financas" element={<Financas />} />
                 <Route path="agenda" element={<Agenda />} />
                 <Route path="anotacoes" element={<Anotacoes />} />
-                <Route path="conversas" element={<Conversas />} />
                 <Route path="lembretes" element={<Lembretes />} />
                 <Route path="habitos" element={<Habitos />} />
                 <Route path="integracoes" element={<Integracoes />} />
