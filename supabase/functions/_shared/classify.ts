@@ -35,6 +35,7 @@ export type Intent =
   | "schedule_meeting"
   | "contact_save"
   | "contact_save_confirm"
+  | "list_contacts"
   | "reminder_delegate"
   | "ai_chat";
 
@@ -116,11 +117,19 @@ export function classifyIntent(msg: string): Intent {
   )
     return "schedule_meeting";
 
+  // Listar contatos salvos na Maya
+  if (
+    /\b(meus|minha|quais|lista(r)?|mostra(r)?|ver|veja|mostre)\s+(os\s+)?(meus\s+)?(contatos?|numeros?|pessoas?)\s*(salvos?|cadastrados?|da maya|que tenho)?\b/i.test(m) ||
+    /\bquem\s+(tenho|esta|estao|tenho\s+salvo)\s*(nos\s+)?(contatos?|agenda)?\b/i.test(m) ||
+    /\bcontatos?\s+salvos?\b/i.test(m)
+  )
+    return "list_contacts";
+
   // Enviar mensagem para um contato salvo
-  // "manda mensagem pra Cibele dizendo X" / "manda uma mensagem pro João que..."
+  // "manda mensagem pra cibele dizendo X" / "manda uma mensagem pro João que..."
   // "fala pra/pro X que..." / "daqui 30min manda pra X..."
   if (
-    /\b(manda(r)?|envia(r)?|fala(r)?|diz(er)?|avisa(r)?)\s+(uma?\s+)?(mensagem\s+)?(pra|para|pro|ao?)\s+[A-ZÁÉÍÓÚ]/i.test(m) &&
+    /\b(manda(r)?|envia(r)?|fala(r)?|diz(er)?|avisa(r)?)\s+(uma?\s+)?(mensagem\s+)?(pra|para|pro|ao?)\s+\w/i.test(m) &&
     !/\b(lembrete|reminder|me avisa|me lembra)\b/i.test(m)
   )
     return "send_to_contact";
@@ -257,8 +266,8 @@ export function parseMinutes(msg: string): number | null {
   const m = msg.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   // "na hora" ou "no momento" → 0 min (avisa na hora)
   if (/(na hora|no momento|no horario|so na hora)/.test(m)) return 0;
-  // "X horas antes" / "X hora antes"
-  const hoursMatch = m.match(/(\d+(?:[.,]\d+)?)\s*hora/);
+  // "X horas antes" / "X hora antes" / "1h antes" / "2h"
+  const hoursMatch = m.match(/(\d+(?:[.,]\d+)?)\s*h(ora)?/);
   if (hoursMatch) return Math.round(parseFloat(hoursMatch[1].replace(",", ".")) * 60);
   // "meia hora"
   if (/meia hora/.test(m)) return 30;

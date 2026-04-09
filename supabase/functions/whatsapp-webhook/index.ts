@@ -4038,14 +4038,15 @@ async function handleSendToContact(
     delayMs = unit.startsWith("min") ? num * 60_000 : num * 3_600_000;
   }
 
-  // Extrai nome do contato — "pra/para/pro NomeProprio"
-  // SEM flag /i para que [A-ZÁÉÍÓÚ] só case maiúsculas → captura apenas tokens PascalCase
-  // Ex: "pro Miguel dizendo..." → captura "Miguel" e para antes de "dizendo" (minúscula)
+  // Extrai nome do contato — "pra/para/pro [Nome]"
+  // Capitaliza o primeiro char após o prefixo para aceitar "pra cibele" e "pra Cibele"
   const prefixMatch = /\b(?:pra|para|pro|ao?)\s+/i.exec(text);
   if (!prefixMatch) {
     return "Não identifiquei para quem enviar. Tente: _Manda pra [Nome] dizendo [mensagem]_";
   }
-  const afterPrefix = text.slice(prefixMatch.index + prefixMatch[0].length);
+  const rawAfterPrefix = text.slice(prefixMatch.index + prefixMatch[0].length);
+  // Capitaliza primeiro char para que "cibele" vire "Cibele" — tokenRe para no 1º minúsculo
+  const afterPrefix = rawAfterPrefix.charAt(0).toUpperCase() + rawAfterPrefix.slice(1);
   // Coleta tokens que começam com maiúscula (nomes próprios) — para no primeiro minúsculo
   const nameTokens: string[] = [];
   const tokenRe = /^([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ][a-záéíóúâêîôûãõç]+)\s*/;
@@ -5141,6 +5142,19 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
       }
       pendingAction = undefined;
       pendingContext = undefined;
+
+    } else if (intent === "list_contacts") {
+      const { data: allContacts } = await supabase
+        .from("contacts")
+        .select("name, phone_number")
+        .eq("user_id", profile.id)
+        .order("name", { ascending: true });
+      if (!allContacts || allContacts.length === 0) {
+        responseText = "Você ainda não tem contatos salvos na Maya. 📇\n\nCompartilhe um contato comigo ou diga _\"Salva o contato [Nome]: [número]\"_";
+      } else {
+        const lines = allContacts.map((c: any) => `• *${c.name}*`).join("\n");
+        responseText = `📇 *Seus contatos salvos (${allContacts.length}):*\n\n${lines}\n\nPara enviar mensagem: _"Manda pra [Nome] dizendo..."_`;
+      }
 
     } else if (intent === "send_to_contact") {
       responseText = await handleSendToContact(
