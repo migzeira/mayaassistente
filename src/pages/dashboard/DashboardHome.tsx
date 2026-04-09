@@ -383,13 +383,21 @@ export default function DashboardHome() {
                 <div className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
                 <Smartphone className="h-3 w-3 text-muted-foreground shrink-0" />
                 <span className="text-xs text-muted-foreground font-mono">
-                  {profile.phone_number.replace(/(\d{2})(\d{2})(\d{5})(\d{4})/, "+$1 ($2) $3-$4")}
+                  {(() => {
+                    // Strip any non-digit characters (e.g. leading "+") before formatting
+                    const d = profile.phone_number.replace(/\D/g, "");
+                    if (d.startsWith("55") && d.length === 13)
+                      return `+55 (${d.slice(2, 4)}) ${d.slice(4, 9)}-${d.slice(9)}`;
+                    if (d.startsWith("55") && d.length === 12)
+                      return `+55 (${d.slice(2, 4)}) ${d.slice(4, 8)}-${d.slice(8)}`;
+                    return `+${d}`;
+                  })()}
                 </span>
               </div>
             ) : (
-              <Link to="/dashboard/perfil" className="flex items-center gap-1.5 text-amber-400 hover:text-amber-300 transition-colors">
+              <Link to="/dashboard/perfil" className="flex items-center gap-1.5 text-primary hover:text-primary/80 transition-colors group">
                 <Smartphone className="h-3 w-3 shrink-0" />
-                <span className="text-xs">Vincular WhatsApp</span>
+                <span className="text-xs font-medium group-hover:underline">Clique aqui para ativar a Maya</span>
               </Link>
             )}
 

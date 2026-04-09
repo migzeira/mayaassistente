@@ -21,25 +21,25 @@ const SUPPORT_WHATSAPP = "5511999999999"; // TODO: trocar pelo número real de s
 const MAX_PHONE_CHANGES = 2; // após isso, campo fica bloqueado
 
 const COUNTRIES = [
-  { ddi: "55",  flag: "🇧🇷", name: "Brasil",          placeholder: "11 99999-9999",  minLen: 10 },
-  { ddi: "1",   flag: "🇺🇸", name: "EUA / Canadá",    placeholder: "555 555-5555",   minLen: 10 },
-  { ddi: "351", flag: "🇵🇹", name: "Portugal",         placeholder: "912 345 678",    minLen: 9  },
-  { ddi: "54",  flag: "🇦🇷", name: "Argentina",        placeholder: "11 1234-5678",   minLen: 10 },
-  { ddi: "52",  flag: "🇲🇽", name: "México",           placeholder: "55 1234-5678",   minLen: 10 },
-  { ddi: "57",  flag: "🇨🇴", name: "Colômbia",         placeholder: "300 123 4567",   minLen: 10 },
-  { ddi: "56",  flag: "🇨🇱", name: "Chile",            placeholder: "9 1234 5678",    minLen: 9  },
-  { ddi: "595", flag: "🇵🇾", name: "Paraguai",         placeholder: "981 123 456",    minLen: 9  },
-  { ddi: "598", flag: "🇺🇾", name: "Uruguai",          placeholder: "094 123 456",    minLen: 9  },
-  { ddi: "58",  flag: "🇻🇪", name: "Venezuela",        placeholder: "412 123 4567",   minLen: 10 },
-  { ddi: "51",  flag: "🇵🇪", name: "Peru",             placeholder: "912 345 678",    minLen: 9  },
-  { ddi: "593", flag: "🇪🇨", name: "Equador",          placeholder: "99 123 4567",    minLen: 9  },
-  { ddi: "244", flag: "🇦🇴", name: "Angola",           placeholder: "923 123 456",    minLen: 9  },
-  { ddi: "258", flag: "🇲🇿", name: "Moçambique",       placeholder: "82 123 4567",    minLen: 9  },
-  { ddi: "44",  flag: "🇬🇧", name: "Reino Unido",      placeholder: "7911 123456",    minLen: 10 },
-  { ddi: "49",  flag: "🇩🇪", name: "Alemanha",         placeholder: "151 23456789",   minLen: 10 },
-  { ddi: "34",  flag: "🇪🇸", name: "Espanha",          placeholder: "612 345 678",    minLen: 9  },
-  { ddi: "33",  flag: "🇫🇷", name: "França",           placeholder: "6 12 34 56 78",  minLen: 9  },
-  { ddi: "39",  flag: "🇮🇹", name: "Itália",           placeholder: "312 345 6789",   minLen: 9  },
+  { ddi: "55",  code: "br", name: "Brasil",          placeholder: "11 99999-9999",  minLen: 10 },
+  { ddi: "1",   code: "us", name: "EUA / Canadá",    placeholder: "555 555-5555",   minLen: 10 },
+  { ddi: "351", code: "pt", name: "Portugal",         placeholder: "912 345 678",    minLen: 9  },
+  { ddi: "54",  code: "ar", name: "Argentina",        placeholder: "11 1234-5678",   minLen: 10 },
+  { ddi: "52",  code: "mx", name: "México",           placeholder: "55 1234-5678",   minLen: 10 },
+  { ddi: "57",  code: "co", name: "Colômbia",         placeholder: "300 123 4567",   minLen: 10 },
+  { ddi: "56",  code: "cl", name: "Chile",            placeholder: "9 1234 5678",    minLen: 9  },
+  { ddi: "595", code: "py", name: "Paraguai",         placeholder: "981 123 456",    minLen: 9  },
+  { ddi: "598", code: "uy", name: "Uruguai",          placeholder: "094 123 456",    minLen: 9  },
+  { ddi: "58",  code: "ve", name: "Venezuela",        placeholder: "412 123 4567",   minLen: 10 },
+  { ddi: "51",  code: "pe", name: "Peru",             placeholder: "912 345 678",    minLen: 9  },
+  { ddi: "593", code: "ec", name: "Equador",          placeholder: "99 123 4567",    minLen: 9  },
+  { ddi: "244", code: "ao", name: "Angola",           placeholder: "923 123 456",    minLen: 9  },
+  { ddi: "258", code: "mz", name: "Moçambique",       placeholder: "82 123 4567",    minLen: 9  },
+  { ddi: "44",  code: "gb", name: "Reino Unido",      placeholder: "7911 123456",    minLen: 10 },
+  { ddi: "49",  code: "de", name: "Alemanha",         placeholder: "151 23456789",   minLen: 10 },
+  { ddi: "34",  code: "es", name: "Espanha",          placeholder: "612 345 678",    minLen: 9  },
+  { ddi: "33",  code: "fr", name: "França",           placeholder: "6 12 34 56 78",  minLen: 9  },
+  { ddi: "39",  code: "it", name: "Itália",           placeholder: "312 345 6789",   minLen: 9  },
 ];
 
 const timezones = [
@@ -51,6 +51,39 @@ const timezones = [
 // ─────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────
+
+/** Flag image from flagcdn.com (works on all OSes including Windows) */
+function FlagImg({ code, className = "" }: { code: string; className?: string }) {
+  return (
+    <img
+      src={`https://flagcdn.com/20x15/${code}.png`}
+      srcSet={`https://flagcdn.com/40x30/${code}.png 2x`}
+      width={20}
+      height={15}
+      alt={code.toUpperCase()}
+      className={`rounded-[2px] object-cover shrink-0 ${className}`}
+      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+    />
+  );
+}
+
+/** Formats a full stored phone number (digits only) for display: +55 (11) 99999-9999 */
+function formatFullPhone(phone: string): string {
+  const d = (phone ?? "").replace(/\D/g, "");
+  if (!d) return phone;
+  // Brazil 13-digit (55 + DDD 2 + 9 digits)
+  if (d.startsWith("55") && d.length === 13)
+    return `+55 (${d.slice(2, 4)}) ${d.slice(4, 9)}-${d.slice(9)}`;
+  // Brazil 12-digit (55 + DDD 2 + 8 digits)
+  if (d.startsWith("55") && d.length === 12)
+    return `+55 (${d.slice(2, 4)}) ${d.slice(4, 8)}-${d.slice(8)}`;
+  // Generic: find DDI prefix
+  const sorted = [...COUNTRIES].sort((a, b) => b.ddi.length - a.ddi.length);
+  for (const c of sorted) {
+    if (d.startsWith(c.ddi)) return `+${c.ddi} ${d.slice(c.ddi.length)}`;
+  }
+  return `+${d}`;
+}
 
 /** Extracts DDI and local part from a stored full phone number (digits only) */
 function extractDDI(fullNumber: string): { ddi: string; local: string } {
@@ -273,8 +306,8 @@ export default function MeuPerfil() {
             {profile.phone_number
               ? isPhoneLocked
                 ? <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-xs flex items-center gap-1"><Lock className="h-3 w-3" /> Bloqueado</Badge>
-                : <Badge className="bg-green-500/20 text-green-300 border-green-500/30 text-xs">Vinculado</Badge>
-              : <Badge className="bg-primary/20 text-primary border-primary/30 text-xs">Obrigatório</Badge>
+                : <Badge className="bg-green-500/20 text-green-300 border-green-500/30 text-xs flex items-center gap-1"><CheckCircle className="h-3 w-3" /> Ativo</Badge>
+              : <Badge className="bg-muted text-muted-foreground border-border text-xs">Nenhum número ativo</Badge>
             }
           </CardTitle>
         </CardHeader>
@@ -282,9 +315,12 @@ export default function MeuPerfil() {
 
           {/* Status messages */}
           {!profile.phone_number && (
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20 text-sm text-primary">
-              <Info className="h-4 w-4 shrink-0 mt-0.5" />
-              <p>Preencha seu número abaixo e salve — a Maya será ativada automaticamente para responder no seu WhatsApp.</p>
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/60 border border-border text-sm text-muted-foreground">
+              <Info className="h-4 w-4 shrink-0 mt-0.5 text-primary" />
+              <div>
+                <p className="font-semibold text-foreground">Nenhum número ativo</p>
+                <p className="mt-0.5">Selecione o país, informe seu número com DDD e clique em <span className="font-medium text-foreground">Salvar</span> — a Maya será ativada automaticamente no seu WhatsApp.</p>
+              </div>
             </div>
           )}
 
@@ -292,9 +328,12 @@ export default function MeuPerfil() {
             <div className="flex items-start gap-2 p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-sm text-green-200">
               <CheckCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <div>
-                <p>Maya ativa! Envie uma mensagem para o WhatsApp da Maya e ela te responderá.</p>
+                <p className="font-semibold">Maya ativa!</p>
+                <p className="mt-0.5">
+                  Respondendo no <span className="font-mono font-medium text-green-100">{formatFullPhone(profile.phone_number)}</span>
+                </p>
                 {changesRemaining > 0 && changesRemaining < MAX_PHONE_CHANGES && (
-                  <p className="mt-1 text-green-300/70 text-xs">
+                  <p className="mt-1.5 text-green-300/70 text-xs">
                     Você ainda pode alterar o número mais {changesRemaining} vez{changesRemaining === 1 ? "" : "es"}.
                   </p>
                 )}
@@ -331,22 +370,20 @@ export default function MeuPerfil() {
               disabled={isPhoneLocked}
             >
               <SelectTrigger className={isPhoneLocked ? "opacity-50 cursor-not-allowed" : ""}>
-                <SelectValue>
-                  <span className="flex items-center gap-2">
-                    <span>{selectedCountry.flag}</span>
-                    <span className="font-mono text-muted-foreground">+{selectedCountry.ddi}</span>
-                    <span>{selectedCountry.name}</span>
-                  </span>
-                </SelectValue>
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <FlagImg code={selectedCountry.code} />
+                  <span className="font-mono text-muted-foreground">+{selectedCountry.ddi}</span>
+                  <span className="truncate">{selectedCountry.name}</span>
+                </div>
               </SelectTrigger>
               <SelectContent>
                 {COUNTRIES.map(c => (
                   <SelectItem key={c.ddi} value={c.ddi}>
-                    <span className="flex items-center gap-2">
-                      <span>{c.flag}</span>
+                    <div className="flex items-center gap-2">
+                      <FlagImg code={c.code} />
                       <span className="font-mono text-muted-foreground w-10">+{c.ddi}</span>
                       <span>{c.name}</span>
-                    </span>
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -358,7 +395,8 @@ export default function MeuPerfil() {
             <div className="flex items-center gap-2">
               {/* DDI badge */}
               <div className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-muted border border-border text-sm font-mono shrink-0 text-muted-foreground select-none">
-                {selectedCountry.flag} +{selectedCountry.ddi}
+                <FlagImg code={selectedCountry.code} />
+                +{selectedCountry.ddi}
               </div>
               {/* Local number */}
               <Input
