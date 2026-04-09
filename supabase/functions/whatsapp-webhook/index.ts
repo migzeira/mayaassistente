@@ -2911,24 +2911,30 @@ serve(async (req) => {
   }
 
   // ─── Contato vCard compartilhado ─────────────────────────────────────────
-  // Evolution API v2: pode vir como contactMessage, contactsArrayMessage,
-  // ou sinalizado via data.messageType
   const messageType = data?.messageType as string | undefined;
   const contactMsg = messageData?.contactMessage as Record<string, unknown> | undefined;
   const contactsArrayMsg = messageData?.contactsArrayMessage as Record<string, unknown> | undefined;
 
-  console.log("[contact-detect] messageType:", messageType, "| contactMsg:", !!contactMsg, "| contactsArrayMsg:", !!contactsArrayMsg);
+  // Log SEMPRE quando não tem texto — ajuda a diagnosticar tipos desconhecidos
+  if (!text?.trim()) {
+    console.log("[no-text] messageType:", messageType,
+      "| keys:", Object.keys(messageData ?? {}),
+      "| contactMsg:", !!contactMsg,
+      "| contactsArrayMsg:", !!contactsArrayMsg,
+      "| raw messageData:", JSON.stringify(messageData ?? {}).slice(0, 300));
+  }
 
-  if (contactMsg || contactsArrayMsg || messageType === "contactMessage" || messageType === "contactsArrayMessage") {
-    // Se chegou via messageType mas messageData não tem o campo direto, tenta messageData inteiro
+  const isContactMsg =
+    !!contactMsg ||
+    !!contactsArrayMsg ||
+    messageType === "contactMessage" ||
+    messageType === "contactsArrayMessage";
+
+  if (isContactMsg) {
     const payload = contactMsg ?? contactsArrayMsg ?? messageData ?? {};
-    console.log("[contact-detect] payload keys:", Object.keys(payload));
-    const debugResult = await handleContactMessage(
-      payload,
-      replyTo,
-      lid,
-    );
-    return new Response(JSON.stringify({ ok: true, debug: debugResult }), {
+    console.log("[contact-detect] matched! payload keys:", Object.keys(payload));
+    const debugResult = await handleContactMessage(payload, replyTo, lid);
+    return new Response(JSON.stringify({ ok: true, contact: true, debug: debugResult }), {
       headers: { "Content-Type": "application/json" },
     });
   }
