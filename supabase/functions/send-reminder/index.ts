@@ -3,10 +3,101 @@
  * Chamada pelo pg_cron a cada 1 minuto.
  * Busca lembretes pendentes cujo send_at <= agora e envia via WhatsApp.
  * Suporta recorrência: cria próxima ocorrência automaticamente.
+ * Suporta hábitos preset com conteúdo dinâmico (versículos, frases).
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendText, sendButtons } from "../_shared/evolution.ts";
+
+// ─────────────────────────────────────────────────────────────
+// Conteúdo dinâmico para hábitos preset
+// ─────────────────────────────────────────────────────────────
+
+const BIBLE_VERSES = [
+  "João 3:16 — Porque Deus amou o mundo de tal maneira que deu o seu Filho unigênito, para que todo o que nele crer não pereça, mas tenha a vida eterna.",
+  "Filipenses 4:13 — Tudo posso naquele que me fortalece.",
+  "Salmos 23:1 — O Senhor é o meu pastor, nada me faltará.",
+  "Jeremias 29:11 — Porque eu sei os planos que tenho para vocês, diz o Senhor, planos de fazê-los prosperar e não de causar dano, planos de dar a vocês esperança e um futuro.",
+  "Romanos 8:28 — Sabemos que todas as coisas cooperam para o bem daqueles que amam a Deus.",
+  "Isaías 40:31 — Mas aqueles que esperam no Senhor renovarão as suas forças. Voarão alto como águias.",
+  "Josué 1:9 — Seja forte e corajoso! Não se apavore nem desanime, pois o Senhor, o seu Deus, estará com você por onde você andar.",
+  "Mateus 6:33 — Busquem, pois, em primeiro lugar o reino de Deus e a sua justiça, e todas essas coisas lhes serão acrescentadas.",
+  "Provérbios 3:5-6 — Confie no Senhor de todo o seu coração e não se apoie em seu próprio entendimento. Reconheça-o em todos os seus caminhos e Ele endireitará as suas veredas.",
+  "Salmos 46:1 — Deus é o nosso refúgio e a nossa fortaleza, socorro bem presente na angústia.",
+  "Efésios 3:20 — Ora, àquele que é poderoso para fazer infinitamente mais do que tudo o que pedimos ou pensamos, segundo o seu poder que atua em nós.",
+  "2 Coríntios 12:9 — A minha graça é suficiente para você, pois o meu poder se aperfeiçoa na fraqueza.",
+  "Salmos 37:4 — Deleita-te no Senhor, e Ele te dará os desejos do teu coração.",
+  "Miquéias 6:8 — O que o Senhor requer de você: que você pratique a justiça, ame a misericórdia e caminhe humildemente com o seu Deus.",
+  "Marcos 11:24 — Por isso eu lhes digo: tudo o que vocês pedirem em oração, creiam que já o receberam, e vocês o terão.",
+  "Mateus 11:28-29 — Venham a mim, todos os que estão cansados e sobrecarregados, e eu lhes darei descanso.",
+  "Salmos 121:2 — O meu socorro vem do Senhor, que fez o céu e a terra.",
+  "Filipenses 4:6-7 — Não andem ansiosos por coisa alguma, mas em tudo, pela oração e súplica, com ação de graças, apresentem seus pedidos a Deus.",
+  "Romanos 15:13 — Que o Deus da esperança os encha de toda alegria e paz, à medida que confiam nele.",
+  "Gálatas 5:22-23 — O fruto do Espírito é amor, alegria, paz, paciência, amabilidade, bondade, fidelidade, mansidão e domínio próprio.",
+  "Hebreus 11:1 — A fé é a certeza daquilo que esperamos e a prova das coisas que não vemos.",
+  "1 Pedro 5:7 — Lançai sobre Ele toda a vossa ansiedade, pois Ele tem cuidado de vós.",
+  "Salmos 119:105 — Lâmpada para os meus pés é a tua palavra e luz para o meu caminho.",
+  "Romanos 8:38-39 — Pois estou convicto de que nem morte nem vida... poderá nos separar do amor de Deus que está em Cristo Jesus, nosso Senhor.",
+  "1 Coríntios 13:4 — O amor é paciente, o amor é bondoso. Não inveja, não se vangloria, não se orgulha.",
+  "Salmos 27:1 — O Senhor é a minha luz e a minha salvação; a quem temerei? O Senhor é a força da minha vida; de quem me recearei?",
+  "Provérbios 16:3 — Entregue ao Senhor tudo que você faz; seus planos terão sucesso.",
+  "Mateus 5:9 — Felizes os pacificadores, porque serão chamados filhos de Deus.",
+  "Colossenses 3:23 — Tudo o que vocês fizerem, façam de todo o coração, como para o Senhor, e não para os homens.",
+  "Salmos 118:24 — Este é o dia que o Senhor fez; regozijemo-nos e alegremo-nos nele.",
+];
+
+const MOTIVATIONAL_QUOTES = [
+  "O sucesso é a soma de pequenos esforços repetidos dia após dia. 🏆 — Robert Collier",
+  "Você não precisa ser ótimo para começar, mas precisa começar para ser ótimo. 🚀 — Zig Ziglar",
+  "A única maneira de fazer um ótimo trabalho é amar o que você faz. ❤️ — Steve Jobs",
+  "O futuro pertence a quem acredita na beleza de seus sonhos. ✨ — Eleanor Roosevelt",
+  "A persistência é o caminho do êxito. 💪 — Charles Chaplin",
+  "Não espere por condições ideais para começar. Comece onde você está. 🎯 — Arthur Ashe",
+  "Cada manhã você tem 24 horas. O que vai fazer com o seu tempo hoje? ⏰",
+  "Sua atitude é mais importante do que seus fatos. 🌟 — Karl Menninger",
+  "O maior risco é não arriscar. 🦁 — Mark Zuckerberg",
+  "Seja a mudança que você deseja ver no mundo. 🌍 — Mahatma Gandhi",
+  "Não importa quão devagar você vai, desde que não pare. 🐢 — Confúcio",
+  "Grandes coisas nunca vêm da zona de conforto. Sai daí! 🔥",
+  "A motivação te faz começar. O hábito te faz continuar. ✅",
+  "Tenha coragem de seguir seu coração e intuição. 💡 — Steve Jobs",
+  "Um passo de cada vez. Você está construindo algo incrível. 🏗️",
+  "A disciplina é a ponte entre objetivos e realizações. 🌉 — Jim Rohn",
+  "Não existe elevador para o sucesso. Você precisa usar as escadas. 📈 — Zig Ziglar",
+  "Você é capaz. Você é forte. Você chegará lá. 💪",
+  "O melhor momento para plantar uma árvore foi há 20 anos. O segundo melhor momento é agora. 🌱",
+  "Sonhe grande, comece pequeno, aja agora. 🎯 — Robin Sharma",
+  "A vida começa no fim da sua zona de conforto. 🚀 — Neale Donald Walsch",
+  "Seja tão bom que não possam te ignorar. ⭐ — Steve Martin",
+  "Hoje é sempre o melhor dia para começar de novo. 🌅",
+  "Cada fracasso é uma lição, não uma derrota. Continue aprendendo! 📚",
+  "Quem não arrisca não petisca. Dê o primeiro passo com fé! 🏃",
+  "Você foi feito(a) para isso. Bora lá! 💥",
+  "Pequenos passos todos os dias constroem grandes conquistas. 🧱",
+  "Acredite em você mesmo e todo o resto virá em seguida. 🌟",
+  "O segredo do sucesso é a consistência do propósito. 🎯 — Benjamin Disraeli",
+  "Hoje você é quem você é. Amanhã você será quem você se tornar. 🦋",
+];
+
+/**
+ * Resolve mensagens de hábitos preset com conteúdo dinâmico.
+ * Versículos e frases são selecionados pelo dia do mês (rotação mensal).
+ */
+function resolveHabitMessage(message: string): string {
+  const dayIndex = new Date().getDate() - 1; // 0-29
+
+  if (message === "{{habit:bible_verse}}") {
+    const verse = BIBLE_VERSES[dayIndex % BIBLE_VERSES.length];
+    return `✝️ *Versículo do dia:*\n\n_"${verse}"_`;
+  }
+
+  if (message === "{{habit:motivation}}") {
+    const quote = MOTIVATIONAL_QUOTES[dayIndex % MOTIVATIONAL_QUOTES.length];
+    return `💪 *Frase do dia:*\n\n"${quote}"`;
+  }
+
+  return message;
+}
 
 /**
  * Detecta se o título do lembrete contém intenção de enviar mensagem para contato.
@@ -78,7 +169,6 @@ serve(async (_req) => {
   // Não usamos CRON_SECRET via Authorization para não conflitar com pg_net.
 
   const now = new Date();
-  const nowIso = now.toISOString();
 
   // ── Recupera lembretes presos em "processing" há mais de 5 min (crash recovery) ──
   const ago5min = new Date(now.getTime() - 5 * 60 * 1000).toISOString();
@@ -113,6 +203,9 @@ serve(async (_req) => {
         reminder.source !== "send_to_contact" && // evita loop
         reminderHasSendToContact(reminder.title ?? "");
 
+      // ─── Resolve conteúdo dinâmico para hábitos preset ────────────────────
+      const finalMessage = resolveHabitMessage(reminder.message ?? "");
+
       if (isDelegateReminder) {
         const sessionPhone = String(reminder.whatsapp_number ?? "").replace(/\D/g, "");
         await sendButtons(
@@ -136,7 +229,7 @@ serve(async (_req) => {
           { onConflict: "phone_number" }
         );
       } else {
-        await sendText(reminder.whatsapp_number, reminder.message);
+        await sendText(reminder.whatsapp_number, finalMessage);
       }
 
       // Marca como enviado
@@ -181,6 +274,8 @@ serve(async (_req) => {
         const next = nextOccurrence(sendAt, reminder.recurrence, reminder.recurrence_value ?? null);
 
         if (next) {
+          // Sempre preserva reminder.message (inclui placeholders {{habit:xxx}})
+          // para que resolveHabitMessage() selecione novo conteúdo a cada envio
           const { error: nextErr } = await supabase.from("reminders").insert({
             user_id: reminder.user_id,
             whatsapp_number: reminder.whatsapp_number,
@@ -191,7 +286,8 @@ serve(async (_req) => {
             recurrence_value: reminder.recurrence_value,
             source: reminder.source ?? "whatsapp",
             status: "pending",
-          });
+            habit_id: reminder.habit_id ?? null,
+          } as any);
           if (nextErr) {
             console.error(`[send-reminder] Failed to schedule next occurrence for ${reminder.id}:`, nextErr.message);
           } else {
