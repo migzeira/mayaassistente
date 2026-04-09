@@ -250,6 +250,39 @@ export type Database = {
           },
         ]
       }
+      contacts: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          phone: string
+          source: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          phone: string
+          source?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          phone?: string
+          source?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       conversations: {
         Row: {
           contact_name: string | null
@@ -469,10 +502,12 @@ export type Database = {
           current_streak: number
           description: string | null
           frequency: string
+          habit_config: Json
           icon: string
           id: string
           is_active: boolean
           name: string
+          preset_key: string | null
           reminder_times: Json
           target_days: Json
           times_per_day: number
@@ -486,10 +521,12 @@ export type Database = {
           current_streak?: number
           description?: string | null
           frequency?: string
+          habit_config?: Json
           icon?: string
           id?: string
           is_active?: boolean
           name: string
+          preset_key?: string | null
           reminder_times?: Json
           target_days?: Json
           times_per_day?: number
@@ -503,10 +540,12 @@ export type Database = {
           current_streak?: number
           description?: string | null
           frequency?: string
+          habit_config?: Json
           icon?: string
           id?: string
           is_active?: boolean
           name?: string
+          preset_key?: string | null
           reminder_times?: Json
           target_days?: Json
           times_per_day?: number
@@ -813,6 +852,7 @@ export type Database = {
           link_code_expires_at: string | null
           messages_limit: number
           messages_used: number
+          phone_changes_count: number
           phone_number: string | null
           plan: string
           timezone: string
@@ -831,6 +871,7 @@ export type Database = {
           link_code_expires_at?: string | null
           messages_limit?: number
           messages_used?: number
+          phone_changes_count?: number
           phone_number?: string | null
           plan?: string
           timezone?: string
@@ -849,6 +890,7 @@ export type Database = {
           link_code_expires_at?: string | null
           messages_limit?: number
           messages_used?: number
+          phone_changes_count?: number
           phone_number?: string | null
           plan?: string
           timezone?: string
@@ -970,6 +1012,7 @@ export type Database = {
         Row: {
           created_at: string
           event_id: string | null
+          habit_id: string | null
           id: string
           message: string
           processing_at: string | null
@@ -986,6 +1029,7 @@ export type Database = {
         Insert: {
           created_at?: string
           event_id?: string | null
+          habit_id?: string | null
           id?: string
           message: string
           processing_at?: string | null
@@ -1002,6 +1046,7 @@ export type Database = {
         Update: {
           created_at?: string
           event_id?: string | null
+          habit_id?: string | null
           id?: string
           message?: string
           processing_at?: string | null
@@ -1021,6 +1066,13 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reminders_habit_id_fkey"
+            columns: ["habit_id"]
+            isOneToOne: false
+            referencedRelation: "habits"
             referencedColumns: ["id"]
           },
           {
@@ -1207,6 +1259,7 @@ export type Database = {
         Returns: {
           created_at: string
           event_id: string | null
+          habit_id: string | null
           id: string
           message: string
           processing_at: string | null
@@ -1238,6 +1291,7 @@ export type Database = {
         }[]
       }
       get_user_id_by_email: { Args: { user_email: string }; Returns: string }
+      reset_missed_streaks: { Args: never; Returns: undefined }
       send_pending_reminders: { Args: never; Returns: undefined }
     }
     Enums: {
