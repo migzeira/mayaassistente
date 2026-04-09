@@ -8,7 +8,7 @@ import {
   Menu, X,
 } from "lucide-react";
 import logoEscrita from "@/assets/logo_escrita.png";
-import logoChats from "@/assets/logo_chats.png";
+import logoIcon from "@/assets/logo_icon.png";
 import googleAgendaImg from "@/assets/google_agenda.png";
 import googleSheetsImg from "@/assets/google_sheets.png";
 import notionImg from "@/assets/notion_logo.png";
@@ -109,8 +109,8 @@ function LogoFull() {
 
 function ChatAvatar() {
   return (
-    <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0 border border-white/10">
-      <img src={logoChats} alt="Minha Maya" className="w-full h-full object-cover" />
+    <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0 border border-white/10 bg-[#16162a]">
+      <img src={logoIcon} alt="Minha Maya" width={36} height={36} className="w-full h-full object-contain p-1" />
     </div>
   );
 }
@@ -252,7 +252,7 @@ function AutoChat({ lines, accent = "violet" }: { lines: ChatLine[]; accent?: Ac
 
   return (
     <div ref={rootRef} className="relative w-full max-w-[380px] mx-auto">
-      <div className={`absolute -inset-6 -z-10 ${glowColor[accent]} blur-3xl rounded-full`} />
+      <div className={`absolute -inset-6 -z-10 ${glowColor[accent]} blur-3xl rounded-full hidden md:block`} />
       <div className="rounded-2xl border border-white/10 bg-[#0b0b12] overflow-hidden shadow-2xl shadow-black/60">
         {/* WA header */}
         <div className="flex items-center gap-2.5 px-4 py-3 bg-[#16162a] border-b border-white/[0.06]">
@@ -269,9 +269,7 @@ function AutoChat({ lines, accent = "violet" }: { lines: ChatLine[]; accent?: Ac
           ref={scrollRef}
           className="px-3 py-3 space-y-2.5 h-[260px] overflow-y-auto"
           style={{
-            backgroundImage: "linear-gradient(rgba(8,8,16,0.87), rgba(8,8,16,0.87)), url('/chat-bg.png')",
-            backgroundSize: "auto, 260px",
-            backgroundRepeat: "no-repeat, repeat",
+            background: "rgb(8,8,16)",
             scrollbarWidth: "none",
           }}
         >
@@ -334,7 +332,8 @@ function HeroPhone() {
         delay += line.pause ?? 700;
       }
     });
-    timers.push(setTimeout(() => setCycle(c => c + 1), delay + 2000));
+    // Restart up to 2 more cycles (3 total) then stop — prevents infinite timer chains
+    if (cycle < 2) timers.push(setTimeout(() => setCycle(c => c + 1), delay + 2000));
     return () => timers.forEach(clearTimeout);
   }, [cycle]);
 
@@ -348,7 +347,7 @@ function HeroPhone() {
 
   return (
     <div className="relative w-[300px] select-none mx-auto">
-      <div className="absolute -inset-10 -z-10 bg-violet-600/18 blur-3xl rounded-full" />
+      <div className="absolute -inset-10 -z-10 bg-violet-600/18 blur-3xl rounded-full hidden md:block" />
       {/* shell */}
       <div className="rounded-[2.4rem] border border-white/10 bg-[#0b0b12] shadow-[0_32px_90px_rgba(0,0,0,.70)] overflow-hidden">
         {/* status */}
@@ -374,9 +373,7 @@ function HeroPhone() {
           ref={scrollRef}
           className="h-[310px] overflow-y-auto flex flex-col px-3 py-3 gap-2"
           style={{
-            backgroundImage: "linear-gradient(rgba(8,8,16,0.87), rgba(8,8,16,0.87)), url('/chat-bg.png')",
-            backgroundSize: "auto, 260px",
-            backgroundRepeat: "no-repeat, repeat",
+            background: "rgb(8,8,16)",
             scrollbarWidth: "none",
           }}
         >
@@ -415,7 +412,7 @@ function HeroPhone() {
 function DashboardMock() {
   return (
     <div className="relative w-full max-w-md mx-auto">
-      <div className="absolute -inset-4 -z-10 bg-indigo-600/10 blur-3xl rounded-full" />
+      <div className="absolute -inset-4 -z-10 bg-indigo-600/10 blur-3xl rounded-full hidden md:block" />
       <div className="rounded-2xl border border-white/10 bg-[#0b0b12] overflow-hidden shadow-2xl shadow-black/50">
         <div className="flex items-center justify-between px-5 py-3.5 bg-[#16162a] border-b border-white/[0.06]">
           <div className="flex items-center gap-2">
@@ -488,7 +485,7 @@ function CategoriesVisual() {
   ];
   return (
     <div className="relative w-full max-w-sm mx-auto">
-      <div className="absolute -inset-4 -z-10 bg-pink-600/10 blur-3xl rounded-full" />
+      <div className="absolute -inset-4 -z-10 bg-pink-600/10 blur-3xl rounded-full hidden md:block" />
       <div className="rounded-2xl border border-white/10 bg-[#0b0b12] overflow-hidden shadow-2xl shadow-black/50 p-5">
         <p className="text-[12px] font-semibold text-gray-400 mb-3">Categorias disponíveis</p>
         <div className="flex flex-wrap gap-2">
@@ -529,7 +526,8 @@ function Background() {
     <>
       <div className="pointer-events-none fixed inset-0 z-0 opacity-[0.016]"
         style={{ backgroundImage: "radial-gradient(circle,#ffffff 1px,transparent 1px)", backgroundSize: "32px 32px" }} />
-      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+      {/* Orb animations hidden on mobile — too GPU-intensive on low-end devices */}
+      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden hidden md:block">
         <div className="absolute -top-56 -left-56 w-[700px] h-[700px] rounded-full bg-violet-700/12 blur-[140px] animate-orb-drift" />
         <div className="absolute top-1/2 -right-56 w-[500px] h-[500px] rounded-full bg-purple-600/9 blur-[110px] animate-orb-drift"
           style={{ animationDelay: "3s", animationDuration: "16s" }} />
@@ -1094,7 +1092,7 @@ export default function Index() {
               <AnimateIn key={int.title} delay={i * 90}>
                 <div className={`rounded-2xl border ${int.border} bg-gradient-to-b ${int.bg} p-6 h-full hover:scale-[1.02] transition-all duration-300`}>
                   <div className={`w-12 h-12 rounded-xl bg-[#0b0b12] border ${int.border} flex items-center justify-center mb-4 overflow-hidden`}>
-                    <img src={int.image} alt={int.title} className="w-7 h-7 object-contain" />
+                    <img src={int.image} alt={int.title} className="w-7 h-7 object-contain" loading="lazy" width={28} height={28} />
                   </div>
                   <h3 className="font-bold text-white text-[16px] mb-2">{int.title}</h3>
                   <p className="text-[13px] text-gray-500 leading-relaxed mb-4">{int.desc}</p>
@@ -1248,8 +1246,8 @@ export default function Index() {
           <AnimateIn from="scale">
             <div className="relative rounded-3xl overflow-hidden border border-violet-500/25 p-14 text-center">
               <div className="absolute inset-0 bg-gradient-to-br from-violet-600/12 via-purple-600/8 to-transparent" />
-              <div className="absolute -top-24 -right-24 w-72 h-72 bg-violet-500/12 rounded-full blur-3xl" />
-              <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-purple-500/12 rounded-full blur-3xl" />
+              <div className="absolute -top-24 -right-24 w-72 h-72 bg-violet-500/12 rounded-full blur-3xl hidden md:block" />
+              <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-purple-500/12 rounded-full blur-3xl hidden md:block" />
               <div className="relative">
                 <div className="w-16 h-16 mx-auto mb-6 flex items-center justify-center">
                   <ChatAvatar />
