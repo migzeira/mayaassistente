@@ -1,7 +1,7 @@
 import { Home, Wallet, CalendarDays, StickyNote, Link2, Settings, User, LogOut, Shield, Bell, X, Zap, BarChart2, BookUser } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import logoEscrita from "@/assets/logo_escrita.webp";
-import logoIcon from "@/assets/logo_icon.png";
+import logoIcon from "@/assets/logo_icon.webp";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";

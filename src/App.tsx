@@ -6,7 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { lazy, Suspense } from "react";
-import logoIcon from "@/assets/logo_icon.png";
+import logoIcon from "@/assets/logo_icon.webp";
 
 // Landing page carrega imediato (SEO + first paint)
 import Index from "./pages/Index";
