@@ -136,11 +136,16 @@ export default function AdminPanel() {
   };
 
   const loadProfiles = async () => {
-    const { data, count } = await supabase
+    const { data, count, error } = await supabase
       .from("profiles")
       .select("id, display_name, phone_number, whatsapp_lid, created_at, account_status", { count: "exact" })
       .order("created_at", { ascending: false })
       .range(usersPage * PAGE_SIZE, (usersPage + 1) * PAGE_SIZE - 1) as any;
+    if (error) {
+      console.error("[admin] loadProfiles error:", error);
+      toast.error("Erro ao carregar usuários");
+      return;
+    }
     if (data) {
       setProfiles(data);
       setUserCount(count || 0);
@@ -210,17 +215,27 @@ export default function AdminPanel() {
   };
 
   const loadKirvanoEvents = async () => {
-    const { data, count } = await (supabase
+    const { data, count, error } = await (supabase
       .from("kirvano_events" as any)
       .select("*", { count: "exact" })
       .order("created_at", { ascending: false })
       .range(kirvanoPage * PAGE_SIZE, (kirvanoPage + 1) * PAGE_SIZE - 1) as any);
+    if (error) {
+      console.error("[admin] loadKirvanoEvents error:", error);
+      // Não mostra toast aqui porque roda em live refresh — ia spamar
+      return;
+    }
     if (data) { setKirvanoEvents(data); setKirvanoCount(count || 0); }
   };
 
   const loadAnalytics = async () => {
     const { data, error } = await (supabase.rpc("get_admin_analytics" as any) as any);
-    if (data && !error) setAnalytics(data);
+    if (error) {
+      console.error("[admin] loadAnalytics error:", error);
+      toast.error("Erro ao carregar métricas");
+      return;
+    }
+    if (data) setAnalytics(data);
   };
 
   const loadSettings = async () => {

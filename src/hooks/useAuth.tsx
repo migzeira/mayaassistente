@@ -19,10 +19,16 @@ const AuthContext = createContext<AuthContextType>({
   signOut: async () => {},
 });
 
+// Emails com bootstrap de admin (fallback se is_admin ainda não estiver setado).
+// Mantido para compatibilidade retroativa — deploy inicial não tinha coluna is_admin.
+const BOOTSTRAP_ADMIN_EMAILS = new Set(["migueldrops@gmail.com"]);
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  // is_admin carregado do banco (profiles.is_admin). Null enquanto não resolveu.
+  const [isAdminFromDb, setIsAdminFromDb] = useState<boolean | null>(null);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -42,7 +48,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const isAdmin = user?.email === 'migueldrops@gmail.com';
+  // Quando user muda, carrega o flag is_admin do profile.
+  // Em caso de erro/coluna ausente, silenciosamente cai no fallback por email.
+  useEffect(() => {
+    let cancelled = false;
+    if (!user?.id) {
+      setIsAdminFromDb(null);
+      return;
+    }
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("is_admin")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (!cancelled) setIsAdminFromDb((data as any)?.is_admin === true);
+      } catch {
+        if (!cancelled) setIsAdminFromDb(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  // Admin se: flag no banco = true OU email está no bootstrap list
+  // Bootstrap garante que o admin inicial sempre funciona mesmo se migration falhar
+  const isAdmin = isAdminFromDb === true || (user?.email ? BOOTSTRAP_ADMIN_EMAILS.has(user.email) : false);
 
   const signOut = async () => {
     await supabase.auth.signOut();

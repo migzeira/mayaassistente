@@ -73,6 +73,10 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
   const [reminders, setReminders] = useState<any[]>([]);
   const [notes, setNotes] = useState<any[]>([]);
   const [activatingDays, setActivatingDays] = useState("");
+  // Rate limit frontend: evita múltiplos cliques simultâneos em ações admin.
+  // Valor = ID da ação em curso (ex: "mensal", "anual", "trial", "permanent", "suspend", "pause_agent").
+  // Botões com outro ID rodando ficam disabled.
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<{
     totalMessages: number;
     avgResponseMs: number | null;
@@ -205,91 +209,131 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
   const handleActivateWithPeriod = async () => {
     const days = parseInt(activatingDays);
     if (!days || days < 1) { toast.error("Informe um número de dias válido"); return; }
-    const accessUntil = addDays(new Date(), days).toISOString();
-    const { error } = await (supabase.from("profiles").update({
-      account_status: "active",
-      access_until: accessUntil,
-      access_source: "admin_trial",
-      subscription_cancelled_at: null,
-    } as any).eq("id", userId) as any);
-    await supabase.from("agent_configs").update({ is_active: true } as any).eq("user_id", userId);
-    if (error) toast.error("Erro ao ativar");
-    else {
-      toast.success(`Período teste de ${days} dia${days > 1 ? "s" : ""} liberado!`);
-      setProfile((p: any) => ({ ...p, account_status: "active", access_until: accessUntil, access_source: "admin_trial", subscription_cancelled_at: null }));
-      setActivatingDays("");
-      onProfileUpdate?.();
+    if (actionInProgress) return;
+    setActionInProgress("trial");
+    try {
+      const accessUntil = addDays(new Date(), days).toISOString();
+      const { error } = await (supabase.from("profiles").update({
+        account_status: "active",
+        access_until: accessUntil,
+        access_source: "admin_trial",
+        subscription_cancelled_at: null,
+      } as any).eq("id", userId) as any);
+      await supabase.from("agent_configs").update({ is_active: true } as any).eq("user_id", userId);
+      if (error) toast.error("Erro ao ativar");
+      else {
+        toast.success(`Período teste de ${days} dia${days > 1 ? "s" : ""} liberado!`);
+        setProfile((p: any) => ({ ...p, account_status: "active", access_until: accessUntil, access_source: "admin_trial", subscription_cancelled_at: null }));
+        setActivatingDays("");
+        onProfileUpdate?.();
+      }
+    } finally {
+      setActionInProgress(null);
     }
   };
 
   // Ativação direta de plano Mensal ou Anual — seta plan + access_until + source
   const handleActivatePlan = async (plan: "maya_mensal" | "maya_anual", days: number) => {
-    const accessUntil = addDays(new Date(), days).toISOString();
-    const { error } = await (supabase.from("profiles").update({
-      account_status: "active",
-      plan,
-      access_until: accessUntil,
-      access_source: "admin_plan",
-      subscription_cancelled_at: null,
-    } as any).eq("id", userId) as any);
-    await supabase.from("agent_configs").update({ is_active: true } as any).eq("user_id", userId);
-    if (error) { toast.error("Erro ao ativar plano"); return; }
-    const label = plan === "maya_anual" ? "Anual" : "Mensal";
-    toast.success(`Plano ${label} liberado pelo admin por ${days} dias!`);
-    setProfile((p: any) => ({ ...p, plan, account_status: "active", access_until: accessUntil, access_source: "admin_plan", subscription_cancelled_at: null }));
-    onProfileUpdate?.();
+    if (actionInProgress) return;
+    const actionId = plan === "maya_anual" ? "anual" : "mensal";
+    setActionInProgress(actionId);
+    try {
+      const accessUntil = addDays(new Date(), days).toISOString();
+      const { error } = await (supabase.from("profiles").update({
+        account_status: "active",
+        plan,
+        access_until: accessUntil,
+        access_source: "admin_plan",
+        subscription_cancelled_at: null,
+      } as any).eq("id", userId) as any);
+      await supabase.from("agent_configs").update({ is_active: true } as any).eq("user_id", userId);
+      if (error) { toast.error("Erro ao ativar plano"); return; }
+      const label = plan === "maya_anual" ? "Anual" : "Mensal";
+      toast.success(`Plano ${label} liberado pelo admin por ${days} dias!`);
+      setProfile((p: any) => ({ ...p, plan, account_status: "active", access_until: accessUntil, access_source: "admin_plan", subscription_cancelled_at: null }));
+      onProfileUpdate?.();
+    } finally {
+      setActionInProgress(null);
+    }
   };
 
   const handleActivatePermanent = async () => {
-    const { error } = await (supabase.from("profiles").update({
-      account_status: "active",
-      access_until: null,
-      access_source: "admin_plan",
-      subscription_cancelled_at: null,
-    } as any).eq("id", userId) as any);
-    await supabase.from("agent_configs").update({ is_active: true } as any).eq("user_id", userId);
-    if (error) toast.error("Erro ao ativar");
-    else {
-      toast.success("Conta ativada permanentemente!");
-      setProfile((p: any) => ({ ...p, account_status: "active", access_until: null, access_source: "admin_plan", subscription_cancelled_at: null }));
-      onProfileUpdate?.();
+    if (actionInProgress) return;
+    if (!window.confirm("Ativar conta permanentemente (sem data de expiração)?")) return;
+    setActionInProgress("permanent");
+    try {
+      const { error } = await (supabase.from("profiles").update({
+        account_status: "active",
+        access_until: null,
+        access_source: "admin_plan",
+        subscription_cancelled_at: null,
+      } as any).eq("id", userId) as any);
+      await supabase.from("agent_configs").update({ is_active: true } as any).eq("user_id", userId);
+      if (error) toast.error("Erro ao ativar");
+      else {
+        toast.success("Conta ativada permanentemente!");
+        setProfile((p: any) => ({ ...p, account_status: "active", access_until: null, access_source: "admin_plan", subscription_cancelled_at: null }));
+        onProfileUpdate?.();
+      }
+    } finally {
+      setActionInProgress(null);
     }
   };
 
   const handleSuspend = async () => {
-    const { error } = await (supabase.from("profiles").update({
-      account_status: "suspended",
-      access_until: null,
-      access_source: null,
-      subscription_cancelled_at: null,
-    } as any).eq("id", userId) as any);
-    await supabase.from("agent_configs").update({ is_active: false } as any).eq("user_id", userId);
-    if (error) toast.error("Erro ao suspender");
-    else {
-      toast.success("Conta suspensa");
-      setProfile((p: any) => ({ ...p, account_status: "suspended", access_until: null, access_source: null, subscription_cancelled_at: null }));
-      onProfileUpdate?.();
+    if (actionInProgress) return;
+    // Confirmação obrigatória em ação destrutiva — cliente para de receber respostas da Maya
+    if (!window.confirm(`Suspender a conta de ${userName}? A Maya vai parar de responder no WhatsApp dele.`)) return;
+    setActionInProgress("suspend");
+    try {
+      const { error } = await (supabase.from("profiles").update({
+        account_status: "suspended",
+        access_until: null,
+        access_source: null,
+        subscription_cancelled_at: null,
+      } as any).eq("id", userId) as any);
+      await supabase.from("agent_configs").update({ is_active: false } as any).eq("user_id", userId);
+      if (error) toast.error("Erro ao suspender");
+      else {
+        toast.success("Conta suspensa");
+        setProfile((p: any) => ({ ...p, account_status: "suspended", access_until: null, access_source: null, subscription_cancelled_at: null }));
+        onProfileUpdate?.();
+      }
+    } finally {
+      setActionInProgress(null);
     }
   };
 
   // Pausa apenas o agente (silencioso) — não mexe em account_status/plan
   const handlePauseAgent = async () => {
-    const { error } = await (supabase.from("agent_configs").update({ is_active: false } as any).eq("user_id", userId) as any);
-    if (error) toast.error("Erro ao pausar agente");
-    else {
-      toast.success("Agente pausado (silencioso)");
-      setAgentConfig((c: any) => ({ ...c, is_active: false }));
-      onProfileUpdate?.();
+    if (actionInProgress) return;
+    setActionInProgress("pause_agent");
+    try {
+      const { error } = await (supabase.from("agent_configs").update({ is_active: false } as any).eq("user_id", userId) as any);
+      if (error) toast.error("Erro ao pausar agente");
+      else {
+        toast.success("Agente pausado (silencioso)");
+        setAgentConfig((c: any) => ({ ...c, is_active: false }));
+        onProfileUpdate?.();
+      }
+    } finally {
+      setActionInProgress(null);
     }
   };
 
   const handleResumeAgent = async () => {
-    const { error } = await (supabase.from("agent_configs").update({ is_active: true } as any).eq("user_id", userId) as any);
-    if (error) toast.error("Erro ao retomar agente");
-    else {
-      toast.success("Agente retomado");
-      setAgentConfig((c: any) => ({ ...c, is_active: true }));
-      onProfileUpdate?.();
+    if (actionInProgress) return;
+    setActionInProgress("resume_agent");
+    try {
+      const { error } = await (supabase.from("agent_configs").update({ is_active: true } as any).eq("user_id", userId) as any);
+      if (error) toast.error("Erro ao retomar agente");
+      else {
+        toast.success("Agente retomado");
+        setAgentConfig((c: any) => ({ ...c, is_active: true }));
+        onProfileUpdate?.();
+      }
+    } finally {
+      setActionInProgress(null);
     }
   };
 
@@ -355,17 +399,19 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
                   size="sm"
                   variant="default"
                   className="h-8 text-xs bg-violet-600 hover:bg-violet-500"
+                  disabled={!!actionInProgress}
                   onClick={() => handleActivatePlan("maya_mensal", 30)}
                 >
-                  Mensal (+30d)
+                  {actionInProgress === "mensal" ? "Ativando..." : "Mensal (+30d)"}
                 </Button>
                 <Button
                   size="sm"
                   variant="default"
                   className="h-8 text-xs bg-violet-700 hover:bg-violet-600"
+                  disabled={!!actionInProgress}
                   onClick={() => handleActivatePlan("maya_anual", 365)}
                 >
-                  Anual (+365d)
+                  {actionInProgress === "anual" ? "Ativando..." : "Anual (+365d)"}
                 </Button>
               </div>
 
@@ -380,15 +426,17 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
                       onChange={e => setActivatingDays(e.target.value)}
                       placeholder="Ex: 7"
                       className="w-24 h-8 text-sm"
+                      disabled={!!actionInProgress}
                     />
-                    <Button size="sm" className="h-8" onClick={handleActivateWithPeriod}>
-                      Liberar
+                    <Button size="sm" className="h-8" disabled={!!actionInProgress} onClick={handleActivateWithPeriod}>
+                      {actionInProgress === "trial" ? "Liberando..." : "Liberar"}
                     </Button>
                   </div>
                 </div>
                 <div className="flex gap-1 flex-wrap">
                   {[3, 7, 14, 30].map(d => (
                     <Button key={d} size="sm" variant="outline" className="h-8 text-xs"
+                      disabled={!!actionInProgress}
                       onClick={() => { setActivatingDays(String(d)); }}>
                       {d}d
                     </Button>
@@ -430,23 +478,23 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
 
               <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
                 {profile?.account_status !== "active" && (
-                  <Button size="sm" variant="default" className="h-8 text-xs" onClick={handleActivatePermanent}>
-                    Ativar permanente
+                  <Button size="sm" variant="default" className="h-8 text-xs" disabled={!!actionInProgress} onClick={handleActivatePermanent}>
+                    {actionInProgress === "permanent" ? "Ativando..." : "Ativar permanente"}
                   </Button>
                 )}
                 {agentConfig && agentConfig.is_active && profile?.account_status === "active" && (
-                  <Button size="sm" variant="secondary" className="h-8 text-xs" onClick={handlePauseAgent}>
-                    Pausar agente
+                  <Button size="sm" variant="secondary" className="h-8 text-xs" disabled={!!actionInProgress} onClick={handlePauseAgent}>
+                    {actionInProgress === "pause_agent" ? "Pausando..." : "Pausar agente"}
                   </Button>
                 )}
                 {agentConfig && !agentConfig.is_active && profile?.account_status === "active" && (
-                  <Button size="sm" variant="default" className="h-8 text-xs bg-blue-600 hover:bg-blue-500" onClick={handleResumeAgent}>
-                    Retomar agente
+                  <Button size="sm" variant="default" className="h-8 text-xs bg-blue-600 hover:bg-blue-500" disabled={!!actionInProgress} onClick={handleResumeAgent}>
+                    {actionInProgress === "resume_agent" ? "Retomando..." : "Retomar agente"}
                   </Button>
                 )}
                 {profile?.account_status !== "suspended" && (
-                  <Button size="sm" variant="destructive" className="h-8 text-xs ml-auto" onClick={handleSuspend}>
-                    Suspender conta
+                  <Button size="sm" variant="destructive" className="h-8 text-xs ml-auto" disabled={!!actionInProgress} onClick={handleSuspend}>
+                    {actionInProgress === "suspend" ? "Suspendendo..." : "Suspender conta"}
                   </Button>
                 )}
               </div>

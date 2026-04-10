@@ -54,8 +54,20 @@ serve(async (req) => {
   const { data: { user } } = await supabaseUser.auth.getUser();
   if (!user) return new Response("Unauthorized", { status: 401, headers: CORS });
 
-  // Somente o administrador pode acessar configurações globais do sistema
-  if (user.email !== "migueldrops@gmail.com") {
+  // Autorização admin: aceita is_admin=true no profile OU email no bootstrap list.
+  // O bootstrap garante que o admin inicial sempre funciona mesmo se a coluna
+  // ainda não tiver sido preenchida (compatibilidade com deploys antigos).
+  const BOOTSTRAP_ADMINS = new Set(["migueldrops@gmail.com"]);
+  let isAdmin = user.email ? BOOTSTRAP_ADMINS.has(user.email) : false;
+  if (!isAdmin) {
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("is_admin")
+      .eq("id", user.id)
+      .maybeSingle();
+    isAdmin = (profile as any)?.is_admin === true;
+  }
+  if (!isAdmin) {
     return new Response("Forbidden", { status: 403, headers: CORS });
   }
 
