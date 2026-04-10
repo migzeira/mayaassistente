@@ -67,14 +67,35 @@ export async function chat(
   return jsonMode ? "{" + text : text;
 }
 
-/** Extrai dados estruturados de transações financeiras do texto do usuário */
+/** Categorias default sempre disponíveis (mesmo quando usuário não tem custom) */
+export const DEFAULT_CATEGORIES = [
+  "alimentacao", "transporte", "moradia", "saude",
+  "lazer", "educacao", "trabalho", "outros",
+];
+
+/** Extrai dados estruturados de transações financeiras do texto do usuário.
+ *  Se o usuário tem categorias customizadas (criadas via app), passe-as em
+ *  userCategories para que a Maya use elas também. Fallback: DEFAULT_CATEGORIES. */
 export async function extractTransactions(
-  text: string
+  text: string,
+  userCategories: string[] = DEFAULT_CATEGORIES
 ): Promise<Array<{ amount: number; description: string; type: "expense" | "income"; category: string }>> {
   const system = `Você é um extrator de dados financeiros. Responda APENAS com JSON válido, sem markdown.`;
 
+  // Normaliza a lista: garante defaults presentes + remove duplicatas (case-insensitive)
+  const seen = new Set<string>();
+  const allCats: string[] = [];
+  for (const c of [...userCategories, ...DEFAULT_CATEGORIES]) {
+    const k = c.toLowerCase().trim();
+    if (k && !seen.has(k)) { seen.add(k); allCats.push(c); }
+  }
+
+  const catList = allCats.join(", ");
+
   const prompt = `Extraia transações financeiras do texto abaixo. Retorne JSON com array "transactions".
-Cada item: { "amount": número, "description": string, "type": "expense" ou "income", "category": uma de [alimentacao, transporte, moradia, saude, lazer, educacao, trabalho, outros] }
+Cada item: { "amount": número, "description": string, "type": "expense" ou "income", "category": uma de [${catList}] }
+
+IMPORTANTE: Escolha a categoria que melhor descreve o gasto. Se o usuário tem categorias personalizadas na lista (ex: "pet", "criptomoedas", "assinaturas"), use elas quando fizer sentido. Se nenhuma encaixa, use "outros".
 
 Texto: "${text}"
 
@@ -83,6 +104,7 @@ Exemplos:
 "paguei 500 no mercado" → expense, alimentacao
 "recebi 1000 de freela" → income, trabalho
 "comprei remédio 80 reais" → expense, saude
+"ração pro cachorro 120" → expense, [pet se existir, senão outros]
 
 Responda SOMENTE com o JSON, sem explicações.`;
 
@@ -92,7 +114,16 @@ Responda SOMENTE com o JSON, sem explicações.`;
     true
   );
   const parsed = JSON.parse(result);
-  return parsed.transactions ?? [];
+  const transactions = parsed.transactions ?? [];
+
+  // Safety net: se AI retornar categoria que não está na lista, força "outros"
+  const allCatsLower = new Set(allCats.map(c => c.toLowerCase()));
+  for (const t of transactions) {
+    if (!t.category || !allCatsLower.has(String(t.category).toLowerCase())) {
+      t.category = "outros";
+    }
+  }
+  return transactions;
 }
 
 /** Tipo de retorno da extração de evento */

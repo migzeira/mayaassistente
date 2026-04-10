@@ -441,10 +441,47 @@ async function handleHabitCheckin(userId: string, message: string, userTz = "Ame
 // RECURRING TRANSACTION HANDLER
 // ─────────────────────────────────────────────
 
+/**
+ * Calcula a próxima ocorrência de um dia do mês a partir de uma data de referência.
+ * Se o dia desejado não existe no mês (ex: 31 em fevereiro), usa o último dia do mês.
+ * Garante que nunca pula um mês — corrige o bug do Math.min(day, 28).
+ */
+function computeNextMonthlyDate(from: Date, dayOfMonth: number): Date {
+  // Candidato no mês atual
+  const lastDayThisMonth = new Date(from.getFullYear(), from.getMonth() + 1, 0).getDate();
+  const effectiveDayThis = Math.min(dayOfMonth, lastDayThisMonth);
+  const candidateThis = new Date(from.getFullYear(), from.getMonth(), effectiveDayThis);
+
+  // Se o candidato é estritamente futuro, usa ele
+  if (candidateThis > from) return candidateThis;
+
+  // Senão, próximo mês (com último-dia-válido como fallback)
+  const nextMonthFirstDay = new Date(from.getFullYear(), from.getMonth() + 1, 1);
+  const lastDayNext = new Date(nextMonthFirstDay.getFullYear(), nextMonthFirstDay.getMonth() + 1, 0).getDate();
+  const effectiveDayNext = Math.min(dayOfMonth, lastDayNext);
+  return new Date(nextMonthFirstDay.getFullYear(), nextMonthFirstDay.getMonth(), effectiveDayNext);
+}
+
 async function handleRecurringCreate(userId: string, message: string): Promise<string> {
+  // Busca categorias do usuário (default + custom)
+  const { data: userCatsData } = await supabase
+    .from("categories")
+    .select("name")
+    .eq("user_id", userId);
+  const userCatNames = (userCatsData ?? [])
+    .map((c: any) => String(c.name ?? "").toLowerCase().trim())
+    .filter(Boolean);
+  const DEFAULT_CATS = ["alimentacao", "transporte", "moradia", "saude", "lazer", "educacao", "trabalho", "outros"];
+  const seen = new Set<string>();
+  const allCats: string[] = [];
+  for (const c of [...userCatNames, ...DEFAULT_CATS]) {
+    if (!seen.has(c)) { seen.add(c); allCats.push(c); }
+  }
+  const catList = allCats.map(c => `"${c}"`).join("|");
+
   // Usa IA pra extrair dados da mensagem
   const prompt = `Extraia de uma frase em português os dados de uma transação financeira recorrente.
-Retorne JSON puro (sem markdown): {"description":"nome curto","amount":número,"type":"expense"|"income","category":"alimentacao"|"transporte"|"moradia"|"saude"|"lazer"|"educacao"|"trabalho"|"outros","frequency":"daily"|"weekly"|"monthly"|"yearly","day_of_month":número|null}
+Retorne JSON puro (sem markdown): {"description":"nome curto","amount":número,"type":"expense"|"income","category":${catList},"frequency":"daily"|"weekly"|"monthly"|"yearly","day_of_month":número|null}
 
 Exemplos:
 - "aluguel 1500 todo dia 5" → {"description":"Aluguel","amount":1500,"type":"expense","category":"moradia","frequency":"monthly","day_of_month":5}
@@ -467,13 +504,19 @@ Frase: "${message}"`;
     return "Não consegui identificar o valor. Exemplo: *aluguel 1500 todo dia 5*";
   }
 
-  // Calcula próxima data
+  // Safety net: se AI retornar categoria não reconhecida, usa "outros"
+  if (parsed.category && !seen.has(String(parsed.category).toLowerCase().trim())) {
+    parsed.category = "outros";
+  }
+
+  // Calcula próxima data — preserva dia 31 usando último dia do mês como fallback
   const now = new Date();
   let nextDate: string;
+  let dayOfMonthToSave: number | null = null;
+
   if (parsed.frequency === "monthly" && parsed.day_of_month) {
-    const day = Math.min(parsed.day_of_month, 28);
-    const month = now.getDate() > day ? now.getMonth() + 1 : now.getMonth();
-    const next = new Date(now.getFullYear(), month, day);
+    dayOfMonthToSave = parsed.day_of_month;
+    const next = computeNextMonthlyDate(now, parsed.day_of_month);
     nextDate = next.toISOString().split("T")[0];
   } else if (parsed.frequency === "weekly") {
     const next = new Date(now);
@@ -497,8 +540,9 @@ Frase: "${message}"`;
     category: parsed.category || "outros",
     frequency: parsed.frequency || "monthly",
     next_date: nextDate,
+    day_of_month: dayOfMonthToSave,
     active: true,
-  });
+  } as any);
 
   if (error) {
     console.error("Recurring create error:", error);
@@ -694,7 +738,17 @@ async function handleFinanceRecord(
   message: string,
   config: Record<string, unknown> | null
 ): Promise<string> {
-  const transactions = await extractTransactions(message);
+  // Busca categorias do usuário (default + custom criadas via app)
+  // pra que a Maya reconheça categorias personalizadas como "Pet", "Criptomoedas" etc
+  const { data: userCatsData } = await supabase
+    .from("categories")
+    .select("name")
+    .eq("user_id", userId);
+  const userCategories = (userCatsData ?? [])
+    .map((c: any) => String(c.name ?? "").toLowerCase().trim())
+    .filter(Boolean);
+
+  const transactions = await extractTransactions(message, userCategories);
 
   if (!transactions.length) {
     return "Não consegui identificar os valores. Pode repetir? Ex: *gastei 200 reais de gasolina*";
@@ -781,7 +835,7 @@ const CATEGORY_SYNONYMS: Record<string, string[]> = {
   trabalho: ["escritorio", "escritório", "ferramenta", "equipamento", "software", "assinatura"],
 };
 
-function detectCategory(m: string): string | null {
+function detectCategory(m: string, customCategories: string[] = []): string | null {
   // Normaliza e tokeniza pra evitar falsos positivos (ex: "moto" != "moradia")
   const normalized = m
     .toLowerCase()
@@ -789,6 +843,20 @@ function detectCategory(m: string): string | null {
     .replace(/[\u0300-\u036f]/g, "");
   const tokens = normalized.split(/\s+/);
 
+  // 1) Match direto com categorias custom do usuário (ex: "pet", "criptomoedas")
+  //    Prioridade sobre sinônimos hardcoded.
+  for (const cat of customCategories) {
+    const catNorm = cat.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    if (!catNorm) continue;
+    // Pula categorias que são iguais às defaults (serão cobertas pelos sinônimos)
+    if (CATEGORY_SYNONYMS[catNorm]) continue;
+    // Match por token exato ou substring multi-word
+    if (catNorm.includes(" ") ? normalized.includes(catNorm) : tokens.includes(catNorm)) {
+      return cat;
+    }
+  }
+
+  // 2) Match via sinônimos das categorias default
   for (const [cat, keywords] of Object.entries(CATEGORY_SYNONYMS)) {
     const normalizedKeywords = keywords.map((k) =>
       k.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -814,8 +882,17 @@ async function handleFinanceReport(
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
 
+  // Busca categorias custom do usuário para reconhecer em filtros
+  const { data: userCatsData } = await supabase
+    .from("categories")
+    .select("name")
+    .eq("user_id", userId);
+  const userCategoryNames = (userCatsData ?? [])
+    .map((c: any) => String(c.name ?? "").toLowerCase().trim())
+    .filter(Boolean);
+
   // Detecta categoria específica na pergunta
-  const filterCategory = detectCategory(m);
+  const filterCategory = detectCategory(m, userCategoryNames);
 
   // Determina período — sempre em BRT para bater com transaction_date salvo
   let startDate: string;
@@ -823,23 +900,74 @@ async function handleFinanceReport(
   let periodLabel: string;
   const now = new Date();
   const nowBRT = now.toLocaleDateString("sv-SE", { timeZone: userTz }); // YYYY-MM-DD em BRT
+  const [nowY, nowM] = nowBRT.split("-").map(Number);
 
-  if (/hoje/.test(m)) {
+  // Nomes de mês → número (0-indexed quando usado com Date)
+  const MONTH_NAMES: Record<string, number> = {
+    janeiro: 1, fevereiro: 2, marco: 3, abril: 4, maio: 5, junho: 6,
+    julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
+  };
+  const matchedMonth = Object.keys(MONTH_NAMES).find(name => m.includes(name));
+
+  const lastDayOfMonth = (y: number, monthOneIndexed: number) =>
+    new Date(y, monthOneIndexed, 0).getDate();
+
+  if (/\b(tudo|todos|total|geral|completo|completa|hist[oó]rico|sempre)\b/.test(m)) {
+    // Sem filtro — tudo desde o início
+    startDate = "1970-01-01";
+    periodLabel = "desde o início";
+  } else if (/\bhoje\b/.test(m)) {
     startDate = nowBRT;
     endDate = nowBRT;
     periodLabel = "hoje";
-  } else if (/semana/.test(m)) {
+  } else if (/\b(ontem)\b/.test(m)) {
+    const y = new Date(now);
+    y.setDate(y.getDate() - 1);
+    startDate = y.toLocaleDateString("sv-SE", { timeZone: userTz });
+    endDate = startDate;
+    periodLabel = "ontem";
+  } else if (/\b(semana\s+passada|semana\s+anterior)\b/.test(m)) {
+    // Semana passada: 7-13 dias atrás
+    const start = new Date(now); start.setDate(now.getDate() - 13);
+    const end = new Date(now); end.setDate(now.getDate() - 7);
+    startDate = start.toLocaleDateString("sv-SE", { timeZone: userTz });
+    endDate = end.toLocaleDateString("sv-SE", { timeZone: userTz });
+    periodLabel = "semana passada";
+  } else if (/\bsemana\b/.test(m)) {
     // Início da semana atual em BRT
     const startOfWeek = new Date(now);
     const dayOfWeek = parseInt(now.toLocaleDateString("en-US", { timeZone: userTz, weekday: "numeric" as any }), 10) || now.getDay();
     startOfWeek.setDate(now.getDate() - dayOfWeek);
     startDate = startOfWeek.toLocaleDateString("sv-SE", { timeZone: userTz });
     periodLabel = "esta semana";
-  } else if (/mes|mês/.test(m)) {
+  } else if (/\b(m[eê]s\s+passado|m[eê]s\s+anterior)\b/.test(m)) {
+    // Mês passado completo
+    const prevMonth = nowM === 1 ? 12 : nowM - 1;
+    const prevYear = nowM === 1 ? nowY - 1 : nowY;
+    startDate = `${prevYear}-${String(prevMonth).padStart(2, "0")}-01`;
+    endDate = `${prevYear}-${String(prevMonth).padStart(2, "0")}-${lastDayOfMonth(prevYear, prevMonth)}`;
+    periodLabel = "mês passado";
+  } else if (matchedMonth) {
+    // Mês específico por nome (ex: "em março", "gastos de abril")
+    const monthNum = MONTH_NAMES[matchedMonth];
+    const isFuture = monthNum > nowM;
+    const year = isFuture ? nowY - 1 : nowY;
+    startDate = `${year}-${String(monthNum).padStart(2, "0")}-01`;
+    endDate = `${year}-${String(monthNum).padStart(2, "0")}-${lastDayOfMonth(year, monthNum)}`;
+    periodLabel = matchedMonth.charAt(0).toUpperCase() + matchedMonth.slice(1) + (year !== nowY ? `/${year}` : "");
+  } else if (/\b(ano\s+passado|ano\s+anterior)\b/.test(m)) {
+    startDate = `${nowY - 1}-01-01`;
+    endDate = `${nowY - 1}-12-31`;
+    periodLabel = "ano passado";
+  } else if (/\b(ano|anual)\b/.test(m)) {
+    startDate = `${nowY}-01-01`;
+    periodLabel = "este ano";
+  } else if (/\b(m[eê]s)\b/.test(m)) {
     const [year, month] = nowBRT.split("-");
     startDate = `${year}-${month}-01`;
     periodLabel = "este mês";
   } else {
+    // Default: este mês
     const [year, month] = nowBRT.split("-");
     startDate = `${year}-${month}-01`;
     periodLabel = "este mês";
@@ -4958,6 +5086,23 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
         .limit(1)
         .maybeSingle();
       session = sessionByUser;
+    }
+
+    // 4a. TTL do pending_action — expira após 30 min de inatividade.
+    // Previne conversas travadas esperando resposta de fluxo abandonado
+    // (ex: event_followup, statement_import, shadow_*). Se usuário demorou
+    // mais de 30 min pra responder, trata nova mensagem como intent nova.
+    if (session?.pending_action && session?.last_activity) {
+      const ageMs = Date.now() - new Date(session.last_activity as string).getTime();
+      const TTL_MS = 30 * 60 * 1000; // 30 minutos
+      if (ageMs > TTL_MS) {
+        supabase.from("whatsapp_sessions")
+          .update({ pending_action: null, pending_context: null })
+          .eq("phone_number", sessionId)
+          .then(() => {}).catch(() => {});
+        session = { ...session, pending_action: null, pending_context: null };
+        log.push("pending_expired");
+      }
     }
 
     // 4b. Verifica respostas rápidas (prioridade máxima)

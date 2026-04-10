@@ -42,8 +42,8 @@ serve(async (req) => {
         source: "recurring",
       });
 
-      // Calcula próxima data
-      const next = calcNextDate(rec.next_date, rec.frequency);
+      // Calcula próxima data — preserva day_of_month original pra não pular meses
+      const next = calcNextDate(rec.next_date, rec.frequency, rec.day_of_month);
       await supabase
         .from("recurring_transactions")
         .update({ next_date: next, last_processed: today })
@@ -57,6 +57,15 @@ serve(async (req) => {
         await sendText(phone,
           `${emoji} *${typeLabel} recorrente registrado!*\n📝 ${rec.description}\n💰 R$ ${Number(rec.amount).toFixed(2).replace(".", ",")}\n🔁 Próxima: ${formatDate(next)}`
         );
+
+        // ── Verifica orçamento e alerta se estourou (só pra gastos) ──
+        // Antes não era chamado — aluguel de R$3000 estourava budget de moradia
+        // R$2000 sem avisar o cliente.
+        if (rec.type === "expense") {
+          await checkBudgetAlertForCategory(rec.user_id, phone, rec.category).catch(err =>
+            console.error(`[budget-alert] Error for ${rec.user_id}:`, err)
+          );
+        }
       }
 
       processed++;
@@ -84,12 +93,21 @@ serve(async (req) => {
   });
 });
 
-function calcNextDate(currentDate: string, frequency: string): string {
+function calcNextDate(currentDate: string, frequency: string, dayOfMonth: number | null = null): string {
   const d = new Date(currentDate + "T12:00:00");
   switch (frequency) {
     case "daily":   d.setDate(d.getDate() + 1); break;
     case "weekly":  d.setDate(d.getDate() + 7); break;
-    case "monthly": d.setMonth(d.getMonth() + 1); break;
+    case "monthly": {
+      // Vai pro primeiro dia do próximo mês e aplica o dia desejado (com fallback ao último dia válido)
+      // Sem isso, setMonth() pode pular meses inteiros (ex: 31 Jan + 1 = 3 Mar, pulou fev).
+      const target = dayOfMonth ?? d.getDate();
+      d.setDate(1);
+      d.setMonth(d.getMonth() + 1);
+      const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      d.setDate(Math.min(target, lastDay));
+      break;
+    }
     case "yearly":  d.setFullYear(d.getFullYear() + 1); break;
   }
   return d.toISOString().split("T")[0];
@@ -99,4 +117,67 @@ function formatDate(dateStr: string): string {
   return new Date(dateStr + "T12:00:00").toLocaleDateString("pt-BR", {
     day: "numeric", month: "long",
   });
+}
+
+/**
+ * Verifica se uma categoria estourou o orçamento do mês e envia alerta no WhatsApp.
+ * Versão simplificada do checkBudgetAlerts do whatsapp-webhook — replica a mesma
+ * lógica pra transações recorrentes (antes não era chamado).
+ */
+async function checkBudgetAlertForCategory(
+  userId: string,
+  phone: string,
+  category: string,
+): Promise<void> {
+  const { data: budget } = await supabase
+    .from("budgets")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("category", category)
+    .maybeSingle();
+
+  if (!budget) return;
+
+  const now = new Date();
+  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const todayStr = now.toISOString().split("T")[0];
+
+  if (budget.last_alert_date === todayStr) return; // já alertou hoje
+
+  const { data: monthTx } = await supabase
+    .from("transactions")
+    .select("amount")
+    .eq("user_id", userId)
+    .eq("type", "expense")
+    .eq("category", category)
+    .gte("transaction_date", monthStart);
+
+  const totalSpent = (monthTx ?? []).reduce((s: number, t: any) => s + Number(t.amount), 0);
+  const limit = Number(budget.amount_limit);
+  const pct = limit > 0 ? (totalSpent / limit) * 100 : 0;
+  const alertThreshold = Number(budget.alert_at_percent) || 80;
+
+  const catEmojis: Record<string, string> = {
+    alimentacao: "🍔", transporte: "🚗", moradia: "🏠", saude: "💊",
+    lazer: "🎮", educacao: "📚", trabalho: "💼", outros: "📦",
+  };
+  const emoji = catEmojis[category] ?? "📌";
+  const catName = category.charAt(0).toUpperCase() + category.slice(1);
+
+  let alertMsg = "";
+  if (pct >= 100) {
+    const excess = totalSpent - limit;
+    alertMsg = `🚨 *Orçamento estourado!*\n\n${emoji} *${catName}*: R$ ${totalSpent.toFixed(2).replace(".", ",")} de R$ ${limit.toFixed(2).replace(".", ",")}\n💸 Excedeu *R$ ${excess.toFixed(2).replace(".", ",")}*\n\n_Transação recorrente fez a categoria estourar o limite este mês._`;
+  } else if (pct >= alertThreshold) {
+    const remaining = limit - totalSpent;
+    alertMsg = `⚠️ *Atenção com o orçamento!*\n\n${emoji} *${catName}*: R$ ${totalSpent.toFixed(2).replace(".", ",")} de R$ ${limit.toFixed(2).replace(".", ",")} (*${pct.toFixed(0)}%*)\n💰 Resta *R$ ${remaining.toFixed(2).replace(".", ",")}* este mês.`;
+  }
+
+  if (alertMsg) {
+    await sendText(phone, alertMsg);
+    await supabase
+      .from("budgets")
+      .update({ last_alert_date: todayStr })
+      .eq("id", budget.id);
+  }
 }
