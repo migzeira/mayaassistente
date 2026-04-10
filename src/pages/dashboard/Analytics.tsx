@@ -120,7 +120,10 @@ export default function Analytics() {
 
     const convIds = convs?.map((c: { id: string }) => c.id) ?? [];
 
-    // Fetch messages only when we have conversation IDs
+    // Fetch messages only when we have conversation IDs.
+    // Limit defensivo de 5000 por query — cliente muito ativo (500 msgs/dia)
+    // acumula 15k em 30 dias. Sem limit, o payload virava 2-3MB por request.
+    // 5000 é suficiente pra estatística representativa (top intents + volume).
     const { data: msgs30 } = convIds.length > 0
       ? await supabase
           .from("messages")
@@ -128,6 +131,7 @@ export default function Analytics() {
           .in("conversation_id", convIds)
           .eq("role", "user")
           .gte("created_at", since30Str)
+          .limit(5000)
       : { data: [] };
 
     const { data: msgs14 } = convIds.length > 0
@@ -137,6 +141,7 @@ export default function Analytics() {
           .in("conversation_id", convIds)
           .eq("role", "user")
           .gte("created_at", since14Str)
+          .limit(5000)
       : { data: [] };
 
     // ── KPIs ──────────────────────────────────────────────────────────────────

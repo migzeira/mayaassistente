@@ -161,7 +161,9 @@ export default function DashboardHome() {
       supabase.from("agent_configs").select("*").eq("user_id", user!.id).single(),
       supabase.from("transactions").select("amount").eq("user_id", user!.id).eq("type", "expense").gte("transaction_date", monthStart).lte("transaction_date", monthEnd),
       supabase.from("events").select("id").eq("user_id", user!.id).gte("event_date", format(now, "yyyy-MM-dd")).lte("event_date", weekEnd),
-      supabase.from("notes").select("id").eq("user_id", user!.id),
+      // Usa count head pra pegar só o total de notas (sem carregar os IDs).
+      // Economiza payload quando user tem centenas de notas.
+      supabase.from("notes").select("id", { count: "exact", head: true }).eq("user_id", user!.id),
       supabase.from("transactions").select("amount, transaction_date").eq("user_id", user!.id).eq("type", "expense").gte("transaction_date", format(subDays(now, 6), "yyyy-MM-dd")).order("transaction_date"),
       supabase.from("events").select("*").eq("user_id", user!.id).gte("event_date", format(now, "yyyy-MM-dd")).order("event_date").order("event_time").limit(3),
       // Pending reminders (next 3)
@@ -180,7 +182,8 @@ export default function DashboardHome() {
     setStats({
       expenses: expensesRes.data?.reduce((s, t) => s + Number(t.amount), 0) ?? 0,
       events: eventsRes.data?.length ?? 0,
-      notes: notesCountRes.data?.length ?? 0,
+      // notesCountRes usa { count: 'exact', head: true } → lê do campo .count
+      notes: (notesCountRes as any).count ?? 0,
       reminders: reminderCount,
     });
 

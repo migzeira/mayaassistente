@@ -168,11 +168,14 @@ export default function Anotacoes() {
   );
 
   const loadData = async () => {
+    // Limit defensivo de 500. Volume típico é <100 notas por cliente.
+    // Sem limit, um cliente com anos de histórico puxava tudo pro browser.
     const { data, error } = await supabase
       .from("notes")
       .select("*")
       .eq("user_id", user!.id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(500);
     if (!error) {
       setNotes(data ?? []);
     }

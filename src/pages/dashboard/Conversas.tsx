@@ -26,7 +26,14 @@ export default function Conversas() {
   useEffect(() => { if (user) loadConversations(); }, [user]);
 
   const loadConversations = async () => {
-    const { data } = await supabase.from("conversations").select("*").eq("user_id", user!.id).order("last_message_at", { ascending: false });
+    // Limita a 100 conversas mais recentes. Cliente típico tem poucas (5-20),
+    // mas sem limit um cliente com 500+ conversas puxava tudo pro browser.
+    const { data } = await supabase
+      .from("conversations")
+      .select("*")
+      .eq("user_id", user!.id)
+      .order("last_message_at", { ascending: false })
+      .limit(100);
     setConversations(data ?? []);
     setLoading(false);
   };
@@ -42,8 +49,17 @@ export default function Conversas() {
 
   const loadMessages = async (convo: any) => {
     setSelectedConvo(convo);
-    const { data } = await supabase.from("messages").select("*").eq("conversation_id", convo.id).order("created_at");
-    setMessages(data ?? []);
+    // Limita a 200 mensagens mais recentes da conversa. Conversas ativas podem
+    // ter milhares de mensagens — sem limit o browser travaria renderizando
+    // todas no DOM. Ordena desc pra pegar as últimas N, depois inverte no front
+    // pra mostrar na ordem cronológica normal.
+    const { data } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("conversation_id", convo.id)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    setMessages((data ?? []).reverse());
   };
 
   if (loading) return <div className="space-y-4">{[1,2,3].map(i => <Skeleton key={i} className="h-20" />)}</div>;

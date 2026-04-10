@@ -127,12 +127,15 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
   const loadConvMessages = useCallback(async (conv: any) => {
     setSelectedConv(conv);
     setLoadingMsgs(true);
+    // Limit de 200 mensagens mais recentes. Desc + reverse no front pra
+    // exibir cronológico. Sem limit, conversa ativa trava o modal.
     const { data } = await supabase
       .from("messages")
       .select("*")
       .eq("conversation_id", conv.id)
-      .order("created_at", { ascending: true });
-    setConvMessages(data || []);
+      .order("created_at", { ascending: false })
+      .limit(200);
+    setConvMessages((data ?? []).reverse());
     setLoadingMsgs(false);
   }, []);
 
@@ -141,19 +144,22 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
     const since30 = new Date(); since30.setDate(since30.getDate() - 30);
     const since14 = new Date(); since14.setDate(since14.getDate() - 14);
 
+    // Limits defensivos: analytics do user (últimos 30 dias). Cliente muito ativo
+    // pode ter 10k+ mensagens em 30 dias — sem limit, cada abertura de UserDetailModal
+    // no admin consumia MB de payload. 5000 msgs é suficiente pra top intents + volume.
     const [{ data: convs }, { data: metrics }] = await Promise.all([
-      supabase.from("conversations").select("id").eq("user_id", userId),
+      supabase.from("conversations").select("id").eq("user_id", userId).limit(500),
       (supabase as any).from("bot_metrics").select("intent, processing_time_ms, success, error_type, created_at")
-        .eq("user_id", userId).gte("created_at", since30.toISOString()).order("created_at", { ascending: false }),
+        .eq("user_id", userId).gte("created_at", since30.toISOString()).order("created_at", { ascending: false }).limit(5000),
     ]);
 
     const convIds = convs?.map((c: { id: string }) => c.id) ?? [];
     const [{ data: msgs30 }, { data: msgs14 }] = await Promise.all([
       convIds.length > 0
-        ? supabase.from("messages").select("intent, created_at, role").in("conversation_id", convIds).eq("role", "user").gte("created_at", since30.toISOString())
+        ? supabase.from("messages").select("intent, created_at, role").in("conversation_id", convIds).eq("role", "user").gte("created_at", since30.toISOString()).limit(5000)
         : Promise.resolve({ data: [] }),
       convIds.length > 0
-        ? supabase.from("messages").select("created_at").in("conversation_id", convIds).eq("role", "user").gte("created_at", since14.toISOString())
+        ? supabase.from("messages").select("created_at").in("conversation_id", convIds).eq("role", "user").gte("created_at", since14.toISOString()).limit(5000)
         : Promise.resolve({ data: [] }),
     ]);
 
@@ -187,11 +193,14 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
   const refreshConvMessages = async () => {
     if (!selectedConv) return;
     setLoadingMsgs(true);
+    // Limit de 200 mensagens mais recentes. Conversa ativa pode ter milhares —
+    // sem limit, o browser travava no DOM. Ordena desc e inverte no front
+    // pra exibir cronológico.
     const [{ data: msgs }, { data: updatedConv }] = await Promise.all([
-      supabase.from("messages").select("*").eq("conversation_id", selectedConv.id).order("created_at", { ascending: true }),
+      supabase.from("messages").select("*").eq("conversation_id", selectedConv.id).order("created_at", { ascending: false }).limit(200),
       supabase.from("conversations").select("*").eq("id", selectedConv.id).maybeSingle(),
     ]);
-    setConvMessages(msgs || []);
+    setConvMessages((msgs ?? []).reverse());
     if (updatedConv) setSelectedConv(updatedConv);
     setLoadingMsgs(false);
   };

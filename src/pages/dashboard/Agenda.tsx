@@ -405,12 +405,21 @@ export default function Agenda() {
   const loadData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
+    // Limita a janela de 60 dias atrás até 180 dias à frente + limit defensivo de 500.
+    // Sem filtro, um cliente com histórico grande carregava TODOS os eventos
+    // (inclusive de anos passados) pro browser. Agenda só mostra month/week/day
+    // view, então eventos antigos não precisam estar na memória.
+    const minDate = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const maxDate = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const { data, error } = await supabase
       .from("events")
       .select("*")
       .eq("user_id", user.id)
+      .gte("event_date", minDate)
+      .lte("event_date", maxDate)
       .order("event_date")
-      .order("event_time");
+      .order("event_time")
+      .limit(500);
     if (error) {
       toast.error("Erro ao carregar eventos");
     }

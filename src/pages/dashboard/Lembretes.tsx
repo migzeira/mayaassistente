@@ -128,13 +128,17 @@ export default function Lembretes() {
   );
 
   const load = async () => {
+    // Limit defensivo de 500. Volume típico do cliente é <100 lembretes,
+    // mas sem limit um cliente com histórico de 2+ anos podia ter milhares
+    // (cada lembrete recorrente gera um reminder por ocorrência).
     const { data } = await supabase
       .from("reminders")
       .select("*")
       .eq("user_id", user!.id)
       .neq("status", "cancelled")
       .neq("source", "habit")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(500);
 
     const sorted = ((data as any[]) ?? []).sort((a, b) => {
       const aIsPending = a.status === "pending";
