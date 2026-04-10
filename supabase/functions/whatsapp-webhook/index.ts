@@ -2842,8 +2842,23 @@ serve(async (req) => {
 
   const pushName = (data?.pushName as string) || "";
 
-  // ─── Detecção de mensagem encaminhada (Modo Sombra) ──────────────────────
-  const imgMsg = messageData?.imageMessage as Record<string, unknown> | undefined;
+  // ─── Detecção de tipos de mídia ─────────────────────────────────────────
+  // Evolution API v2 pode empacotar imagens em viewOnceMessage, viewOnceMessageV2 etc.
+  // Estratégia: tenta messageData.imageMessage direto primeiro, depois desembrulha wrappers
+  const _imgDirect = messageData?.imageMessage as Record<string, unknown> | undefined;
+  const _viewOnce = (messageData?.viewOnceMessage as Record<string, unknown>)?.message as Record<string, unknown> | undefined;
+  const _viewOnceV2 = ((messageData?.viewOnceMessageV2 as Record<string, unknown>)?.message as Record<string, unknown>)?.imageMessage as Record<string, unknown> | undefined;
+  const _ephemeral = (messageData?.ephemeralMessage as Record<string, unknown>)?.message as Record<string, unknown> | undefined;
+  const imgMsg =
+    _imgDirect ??
+    (_viewOnce?.imageMessage as Record<string, unknown> | undefined) ??
+    _viewOnceV2 ??
+    (_ephemeral?.imageMessage as Record<string, unknown> | undefined);
+
+  // Fallback: Evolution API sinaliza tipo no campo messageType
+  const _messageType = (data?.messageType as string | undefined) ?? "";
+  const isImageByType = _messageType === "imageMessage" || _messageType === "viewOnceMessageV2";
+
   const audioMsgRaw = (messageData?.audioMessage ?? messageData?.pttMessage) as Record<string, unknown> | undefined;
   const docMsg = messageData?.documentMessage as Record<string, unknown> | undefined;
 
@@ -2923,10 +2938,11 @@ serve(async (req) => {
   }
 
   // ─── Imagem (nota fiscal / recibo / foto encaminhada) ────────────────────
-  if (imgMsg) {
+  if (imgMsg || isImageByType) {
+    console.log("[image] detected — imgMsg:", !!imgMsg, "isImageByType:", isImageByType, "messageType:", _messageType);
     const media = await downloadMediaBase64(data);
     if (media) {
-      const caption = (imgMsg.caption as string | undefined) || "";
+      const caption = (imgMsg?.caption as string | undefined) || "";
       const debugResult = await processImageMessage(
         replyTo, media.base64, media.mimetype, lid, messageId, pushName, isForwarded, caption
       );
@@ -2935,7 +2951,7 @@ serve(async (req) => {
       });
     }
     // Download falhou — avisa o usuário em vez de silêncio
-    console.error("[image] downloadMediaBase64 returned null for", replyTo);
+    console.error("[image] downloadMediaBase64 returned null for", replyTo, "messageType:", _messageType);
     await sendText(replyTo, "⚠️ Não consegui processar a imagem. Pode tentar enviar de novo? Se o problema persistir, descreva a transação por texto: _gastei R$X em Y_");
     return new Response("OK");
   }
@@ -3851,15 +3867,14 @@ async function handleDocumentMessage(
       return await processImageMessage(replyTo, media.base64, media.mimetype, lid, messageId, pushName, isForwarded) as string[];
     }
 
-    // PDF: tenta processar como imagem via Vision (muitos PDFs de boleto sao scan)
+    // PDF: o Vision API não processa PDF binário diretamente.
+    // Orienta o usuário a enviar como screenshot/foto para melhor resultado.
     if (mimetype === "application/pdf") {
-      // Tenta enviar ao Vision como se fosse imagem (funciona para PDFs de pagina unica)
-      try {
-        const result = await processImageMessage(replyTo, media.base64, "image/png", lid, messageId, pushName, isForwarded) as string[];
-        if (result.includes("single_tx_saved") || result.includes("preview_sent")) {
-          return result; // Deu certo via Vision
-        }
-      } catch { /* Falhou como imagem — salva como nota */ }
+      const { profile: pdfProfile } = await resolveProfileForShadow(replyTo, lid);
+      const sendPhone = pdfProfile?.phone_number ?? replyTo;
+      await sendText(sendPhone, `📄 Recebi o PDF "${fileName}"!\n\nPara registrar as transações automaticamente, tire um *screenshot* da tela do comprovante e envie como foto — o Vision funciona melhor com imagem do que com PDF.\n\nOu me diga por texto: _gastei R$X em Y_`);
+      log.push("pdf_guided_to_screenshot");
+      return log;
     }
 
     // Fallback: salva como nota com metadata
