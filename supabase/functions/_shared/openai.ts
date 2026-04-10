@@ -330,7 +330,8 @@ export interface StatementExtraction {
  */
 export async function extractStatementFromImage(
   base64: string,
-  mimetype: string
+  mimetype: string,
+  caption = ""
 ): Promise<StatementExtraction> {
   const fallback: StatementExtraction = {
     document_type: "unknown",
@@ -339,7 +340,18 @@ export async function extractStatementFromImage(
     total_income: 0,
   };
 
-  const mediaType = (mimetype || "image/jpeg") as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+  // Normaliza mimetype — WhatsApp às vezes envia "image/webp" ou sem sufixo
+  const rawMime = (mimetype || "image/jpeg").toLowerCase();
+  const mediaType = (
+    rawMime.includes("png") ? "image/png" :
+    rawMime.includes("webp") ? "image/webp" :
+    rawMime.includes("gif") ? "image/gif" :
+    "image/jpeg"
+  ) as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+
+  const captionHint = caption
+    ? `\n\nDica do usuário (legenda enviada junto com a imagem): "${caption}"`
+    : "";
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -349,7 +361,7 @@ export async function extractStatementFromImage(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-haiku-4-5",
+      model: Deno.env.get("CLAUDE_MODEL") ?? "claude-haiku-4-5-20251001",
       max_tokens: 2048,
       system: `Você é um extrator especializado de documentos financeiros brasileiros. Analise imagens e retorne APENAS JSON válido, sem markdown, sem explicações.`,
       messages: [{
@@ -361,7 +373,7 @@ export async function extractStatementFromImage(
           },
           {
             type: "text",
-            text: `Analise esta imagem e identifique o tipo de documento financeiro.
+            text: `Analise esta imagem e identifique o tipo de documento financeiro.${captionHint}
 
 Tipos possíveis:
 - "extrato": extrato bancário com múltiplos lançamentos de débito/crédito
@@ -369,6 +381,8 @@ Tipos possíveis:
 - "nota_fiscal": nota fiscal, cupom fiscal ou recibo de loja (1-3 itens geralmente)
 - "comprovante": comprovante de PIX, TED, boleto ou transferência (pagamento único)
 - "unknown": não é documento financeiro
+
+IMPORTANTE: Se a dica do usuário mencionar "comprovante", "pix", "pagamento", "recibo", "nota fiscal" → priorize esse tipo mesmo se a imagem for parcialmente legível.
 
 Para cada transação visível extraia:
 - amount: valor numérico (positivo sempre)
@@ -406,7 +420,11 @@ Retorne SOMENTE este JSON (sem markdown):
     }),
   });
 
-  if (!res.ok) return fallback;
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    console.error("[extractStatementFromImage] API error:", res.status, errText.slice(0, 200));
+    return fallback;
+  }
 
   const data = await res.json();
   const text = (data.content?.[0]?.text as string) ?? "";

@@ -2926,11 +2926,17 @@ serve(async (req) => {
   if (imgMsg) {
     const media = await downloadMediaBase64(data);
     if (media) {
-      const debugResult = await processImageMessage(replyTo, media.base64, media.mimetype, lid, messageId, pushName, isForwarded);
+      const caption = (imgMsg.caption as string | undefined) || "";
+      const debugResult = await processImageMessage(
+        replyTo, media.base64, media.mimetype, lid, messageId, pushName, isForwarded, caption
+      );
       return new Response(JSON.stringify({ ok: true, debug: debugResult }), {
         headers: { "Content-Type": "application/json" },
       });
     }
+    // Download falhou — avisa o usuário em vez de silêncio
+    console.error("[image] downloadMediaBase64 returned null for", replyTo);
+    await sendText(replyTo, "⚠️ Não consegui processar a imagem. Pode tentar enviar de novo? Se o problema persistir, descreva a transação por texto: _gastei R$X em Y_");
     return new Response("OK");
   }
 
@@ -4431,13 +4437,15 @@ async function processImageMessage(
   lid: string | null,
   messageId: string | undefined,
   pushName: string,
-  isForwarded = false
+  isForwarded = false,
+  caption = ""
 ): Promise<unknown> {
   const log: string[] = ["image_processing"];
   if (isForwarded) log.push("forwarded");
+  if (caption) log.push(`caption: ${caption.slice(0, 60)}`);
   try {
-    // 1. Extract using smart statement analysis
-    const extraction = await extractStatementFromImage(base64, mimetype);
+    // 1. Extract using smart statement analysis (passa caption como hint para o Vision)
+    const extraction = await extractStatementFromImage(base64, mimetype, caption);
     log.push(`doc_type: ${extraction.document_type}, tx_count: ${extraction.transactions.length}`);
 
     // 2. Normalize phone for profile lookup and session key
