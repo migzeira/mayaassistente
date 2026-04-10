@@ -407,61 +407,31 @@ function HeroPhone() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   GIF PHONE MOCKUP — shell de celular com GIF como tela
+   GIF PHONE — exibe o GIF/vídeo diretamente (o próprio GIF já é o celular)
 ───────────────────────────────────────────────────────────────────────────── */
 function GifPhone({ src, alt }: { src: string; alt: string }) {
   const isVideo = src.endsWith(".webm") || src.endsWith(".mp4");
   return (
-    <div className="relative w-[300px] select-none mx-auto">
+    <div className="relative select-none mx-auto" style={{ maxWidth: "320px" }}>
       <div className="absolute -inset-10 -z-10 bg-violet-600/18 blur-3xl rounded-full hidden md:block" />
-      <div className="rounded-[2.4rem] border border-white/10 bg-[#0b0b12] shadow-[0_32px_90px_rgba(0,0,0,.70)] overflow-hidden">
-        {/* status bar */}
-        <div className="relative h-9 flex items-center px-6 justify-between bg-[#0b0b12]">
-          <span className="text-[10px] text-gray-400">
-            {String(new Date().getHours()).padStart(2,"0")}:{String(new Date().getMinutes()).padStart(2,"0")}
-          </span>
-          <div className="absolute left-1/2 -translate-x-1/2 w-20 h-[18px] bg-black rounded-full" />
-          <div className="w-4 h-2 border border-gray-500 rounded-[2px] flex items-center px-px">
-            <div className="h-full bg-gray-400 rounded-[1px]" style={{ width: "70%" }} />
-          </div>
-        </div>
-        {/* header */}
-        <div className="flex items-center gap-2.5 px-4 py-2.5 bg-[#16162a] border-b border-white/[0.06]">
-          <ChatAvatar />
-          <div>
-            <p className="text-[11px] font-semibold text-white leading-none mb-0.5">Minha Maya</p>
-            <p className="flex items-center gap-1 text-[10px] text-emerald-400">
-              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />online
-            </p>
-          </div>
-        </div>
-        {/* Conteúdo: video (WebM/MP4) ou gif */}
-        {isVideo ? (
-          <video
-            src={src}
-            autoPlay
-            loop
-            muted
-            playsInline
-            className="w-full object-cover"
-            style={{ display: "block", maxHeight: "380px" }}
-          />
-        ) : (
-          <img
-            src={src}
-            alt={alt}
-            className="w-full object-cover"
-            style={{ display: "block", maxHeight: "380px" }}
-          />
-        )}
-        {/* input bar */}
-        <div className="flex items-center gap-2 px-3 py-2.5 bg-[#0b0b12] border-t border-white/[0.06]">
-          <div className="flex-1 bg-white/[0.05] rounded-full px-3 py-1.5 text-[10px] text-gray-600">Mande uma mensagem...</div>
-          <div className="w-7 h-7 rounded-full bg-violet-600 flex items-center justify-center flex-shrink-0">
-            <Mic className="w-3.5 h-3.5 text-white" />
-          </div>
-        </div>
-      </div>
+      {isVideo ? (
+        <video
+          src={src}
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="w-full"
+          style={{ display: "block" }}
+        />
+      ) : (
+        <img
+          src={src}
+          alt={alt}
+          className="w-full"
+          style={{ display: "block" }}
+        />
+      )}
     </div>
   );
 }
@@ -844,7 +814,7 @@ export default function Index() {
           </div>
 
           <AnimateIn from="scale" delay={120}>
-            <GifPhone src="/gifs/gif-inicial.mp4" alt="Maya no WhatsApp" />
+            <GifPhone src="/gifs/gif-inicial.webm" alt="Maya no WhatsApp" />
           </AnimateIn>
         </div>
         <div className="absolute bottom-0 inset-x-0 h-24 bg-gradient-to-t from-[#03030a] to-transparent pointer-events-none" />
@@ -999,7 +969,7 @@ export default function Index() {
               </div>
             </AnimateIn>
             <AnimateIn from="right">
-              <GifPhone src="/gifs/gif-contatos.mp4" alt="Maya processando mensagens" />
+              <GifPhone src="/gifs/gif-contatos.webm" alt="Maya processando mensagens" />
             </AnimateIn>
           </div>
         </div>
@@ -1039,7 +1009,7 @@ export default function Index() {
             </div>
           </AnimateIn>
           <AnimateIn from="right">
-            <GifPhone src="/gifs/gif-reuniao.mp4" alt="Maya gerenciando agenda" />
+            <GifPhone src="/gifs/gif-reuniao.webm" alt="Maya gerenciando agenda" />
           </AnimateIn>
         </div>
       </Section>
