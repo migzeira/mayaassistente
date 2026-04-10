@@ -4045,8 +4045,11 @@ async function handleSendToContact(
     return "Não identifiquei para quem enviar. Tente: _Manda pra [Nome] dizendo [mensagem]_";
   }
   const rawAfterPrefix = text.slice(prefixMatch.index + prefixMatch[0].length);
-  // Capitaliza primeiro char para que "cibele" vire "Cibele" — tokenRe para no 1º minúsculo
-  const afterPrefix = rawAfterPrefix.charAt(0).toUpperCase() + rawAfterPrefix.slice(1);
+  // Normaliza para Title Case: "cibele" → "Cibele", "CIBELE" → "Cibele", "CIBELE SILVA" → "Cibele Silva"
+  // Só é usado para extração de nome (tokenRe); a mensagem é extraída do `text` original na linha abaixo
+  const afterPrefix = rawAfterPrefix.split(/\s+/).map(w =>
+    w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w
+  ).join(" ");
   // Coleta tokens que começam com maiúscula (nomes próprios) — para no primeiro minúsculo
   const nameTokens: string[] = [];
   const tokenRe = /^([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ][a-záéíóúâêîôûãõç]+)\s*/;
@@ -4192,7 +4195,10 @@ async function handleScheduleMeeting(
   if (!contactMatch) {
     return "Não identifiquei com quem marcar a reunião. Tente: _Marca reunião com Guilherme amanhã às 14h_";
   }
-  const contactName = contactMatch[1];
+  // Normaliza para Title Case: "GUILHERME" → "Guilherme", "guilherme" → "Guilherme"
+  const contactName = contactMatch[1].split(/\s+/).map(w =>
+    w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w
+  ).join(" ");
 
   const { data: found } = await supabase
     .from("contacts")
