@@ -28,4 +28,4 @@ dist-ssr
 .env.local
 .env.production
 .env.*.local
-public/gifs/gif-reuniao.gif
+

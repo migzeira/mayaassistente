@@ -408,30 +408,30 @@ function HeroPhone() {
 
 /* ─────────────────────────────────────────────────────────────────────────────
    GIF PHONE — exibe o GIF/vídeo diretamente (o próprio GIF já é o celular)
+   Estratégia multi-formato com alpha:
+   - WebM VP9 (yuva420p): Chrome, Firefox, Android — arquivo principal
+   - Animated WebP (yuva420p): Safari 14+/iOS 14+ — fallback via <img> dentro
+     do <video>; quando o browser não suporta WebM, renderiza o <img> com WebP
+     animado e transparente (sem fundo branco).
 ───────────────────────────────────────────────────────────────────────────── */
 function GifPhone({ src, alt }: { src: string; alt: string }) {
-  const isVideo = src.endsWith(".webm") || src.endsWith(".mp4");
+  // deriva o caminho WebP a partir do src (.webm → .webp)
+  const webpSrc = src.replace(/\.(webm|mp4)$/, ".webp");
   return (
     <div className="relative select-none mx-auto" style={{ maxWidth: "320px" }}>
       <div className="absolute -inset-10 -z-10 bg-violet-600/18 blur-3xl rounded-full hidden md:block" />
-      {isVideo ? (
-        <video
-          src={src}
-          autoPlay
-          loop
-          muted
-          playsInline
-          className="w-full"
-          style={{ display: "block" }}
-        />
-      ) : (
-        <img
-          src={src}
-          alt={alt}
-          className="w-full"
-          style={{ display: "block" }}
-        />
-      )}
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="w-full"
+        style={{ display: "block", background: "transparent" }}
+      >
+        <source src={src} type="video/webm" />
+        {/* Fallback para Safari/iOS 14+: animated WebP com alpha — sem fundo branco */}
+        <img src={webpSrc} alt={alt} className="w-full" style={{ display: "block" }} />
+      </video>
     </div>
   );
 }
