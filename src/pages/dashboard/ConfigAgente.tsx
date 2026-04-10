@@ -57,7 +57,8 @@ export default function ConfigAgente() {
       tone: config.tone || "profissional",
       language: config.language || "pt-BR",
       // Never overwrite system_prompt — it has no UI field here
-      custom_instructions: config.custom_instructions ?? null,
+      // Trim custom_instructions: se o user digita só espaço, salva null (não espaço)
+      custom_instructions: config.custom_instructions?.trim() || null,
       // Modules are boolean after normalization; persist explicit true/false (not null)
       module_finance: config.module_finance === true,
       module_agenda: config.module_agenda === true,

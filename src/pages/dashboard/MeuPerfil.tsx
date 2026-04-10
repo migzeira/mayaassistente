@@ -174,7 +174,12 @@ export default function MeuPerfil() {
   const isPhoneLocked = storedPhone !== null && changesCount >= MAX_PHONE_CHANGES;
 
   // Plan gate: só pode cadastrar/editar WhatsApp se tiver plano ativo
-  const hasActivePlan = profile?.account_status === "active";
+  // Verifica account_status E access_until (se tiver data, precisa estar no futuro).
+  // Sem essa segunda checagem, um user expirado com status ainda 'active' no banco
+  // (antes do cron rodar) conseguia cadastrar WhatsApp e depois a Maya bloqueava no webhook.
+  const hasActivePlan =
+    profile?.account_status === "active" &&
+    (!profile?.access_until || new Date(profile.access_until) > new Date());
   const isPhoneBlockedByPlan = !hasActivePlan;
 
   // ── Save ──
@@ -429,7 +434,7 @@ export default function MeuPerfil() {
           : "border-primary/40 bg-primary/5"
       }`}>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
+          <CardTitle className="text-base flex items-center gap-2 flex-wrap">
             <Smartphone className={`h-5 w-5 ${profile.phone_number ? isPhoneLocked ? "text-amber-400" : "text-green-400" : "text-primary"}`} />
             Número do WhatsApp
             {profile.phone_number
@@ -438,6 +443,14 @@ export default function MeuPerfil() {
                 : <Badge className="bg-green-500/20 text-green-300 border-green-500/30 text-xs flex items-center gap-1"><CheckCircle className="h-3 w-3" /> Ativo</Badge>
               : <Badge className="bg-muted text-muted-foreground border-border text-xs">Nenhum número ativo</Badge>
             }
+            {/* Counter persistente: mostra quantas mudanças restam, sempre visível */}
+            {profile.phone_number && !isPhoneLocked && (
+              <Badge className="bg-muted/60 text-muted-foreground border-border text-xs font-normal">
+                {changesRemaining === MAX_PHONE_CHANGES
+                  ? `${MAX_PHONE_CHANGES} mudanças disponíveis`
+                  : `${changesRemaining} de ${MAX_PHONE_CHANGES} mudanças restantes`}
+              </Badge>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">

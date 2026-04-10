@@ -1,9 +1,57 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sendText } from "./evolution.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
+
+/** Notifica o usuário via WhatsApp quando uma integração expira (fire-and-forget).
+ *  Dedup: só envia 1x por dia por provider (usa integration.metadata.last_expiry_notification).
+ *  Silencioso em caso de erro — nunca deve quebrar o fluxo principal. */
+async function notifyIntegrationExpired(
+  userId: string,
+  provider: string,
+  integrationId: string,
+): Promise<void> {
+  try {
+    const { data: integ } = await supabase
+      .from("integrations")
+      .select("metadata")
+      .eq("id", integrationId)
+      .maybeSingle();
+    const today = new Date().toISOString().slice(0, 10);
+    const meta = (integ?.metadata ?? {}) as Record<string, unknown>;
+    if (meta.last_expiry_notification === today) return; // já avisou hoje
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("phone_number, display_name")
+      .eq("id", userId)
+      .maybeSingle();
+    const phone = profile?.phone_number?.replace(/\D/g, "");
+    if (!phone) return;
+
+    const providerLabel =
+      provider === "google_calendar" ? "Google Calendar" :
+      provider === "google_sheets"   ? "Google Sheets" :
+      provider === "notion"          ? "Notion" :
+      provider;
+
+    await sendText(
+      phone,
+      `⚠️ *Integração expirou*\n\nSua conexão com *${providerLabel}* expirou e foi desconectada automaticamente.\n\nReconecte em *Integrações* no app da Minha Maya pra voltar a sincronizar.`
+    );
+
+    // Marca dedup no metadata
+    await supabase
+      .from("integrations")
+      .update({ metadata: { ...meta, last_expiry_notification: today } })
+      .eq("id", integrationId);
+  } catch (err) {
+    console.warn("[notifyIntegrationExpired] failed:", err);
+  }
+}
 
 /** Lê credencial do app_settings (fallback para env var) */
 async function getSetting(key: string): Promise<string> {
@@ -61,12 +109,14 @@ async function getIntegration(userId: string, provider: string) {
         .eq("id", data.id);
       data.access_token = tokens.access_token;
     } else if (tokens.error === "invalid_grant") {
-      // Refresh token expirou — desconecta integração automaticamente
+      // Refresh token expirou — desconecta integração automaticamente e notifica usuário
       console.error("Google refresh token expired, disconnecting integration:", data.id);
       await supabase
         .from("integrations")
         .update({ is_connected: false, access_token: null, refresh_token: null })
         .eq("id", data.id);
+      // Fire-and-forget: avisa o usuário que a integração foi desconectada
+      notifyIntegrationExpired(userId, provider, data.id).catch(() => {});
       return null;
     } else {
       console.error("Google token refresh failed:", tokens.error_description ?? tokens.error);
