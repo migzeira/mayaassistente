@@ -2964,7 +2964,7 @@ async function handleNotesSave(
   // Usuário respondendo "anotações" ou "lembrete" à pergunta de disambiguação
   if (step === "note_or_reminder_choice") {
     const m2 = message.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-    const cleanContent = ctx.cleanContent as string;
+    const cleanContent1 = ctx.cleanContent as string;
     const suggestedTitle = ctx.suggestedTitle as string;
 
     const wantsReminder =
@@ -2974,11 +2974,11 @@ async function handleNotesSave(
     if (wantsReminder) {
       // Guarda o conteúdo e pede o horário
       return {
-        response: `⏰ *Certo!* Em qual momento você quer ser lembrado sobre:\n_"${cleanContent}"_?\n\n_Ex: amanhã às 14h, sexta às 10h, daqui 2 horas_`,
+        response: `⏰ *Certo!* Em qual momento você quer ser lembrado sobre:\n_"${cleanContent1}"_?\n\n_Ex: amanhã às 14h, sexta às 10h, daqui 2 horas_`,
         pendingAction: "notes_save",
         pendingContext: {
           step: "note_reminder_time_pending",
-          cleanContent,
+          cleanContent: cleanContent1,
           suggestedTitle,
         },
       };
@@ -2988,23 +2988,23 @@ async function handleNotesSave(
     const { error: noteErr } = await supabase.from("notes").insert({
       user_id: userId,
       title: suggestedTitle || null,
-      content: cleanContent,
+      content: cleanContent1,
       source: "whatsapp",
     });
     if (noteErr) throw noteErr;
-    syncNotion(userId, cleanContent).catch(() => {});
+    syncNotion(userId, cleanContent1).catch(() => {});
 
     return {
-      response: buildNoteResponse(cleanContent),
+      response: buildNoteResponse(cleanContent1),
       pendingAction: "notes_save",
-      pendingContext: { step: "note_reminder_offer", noteTitle: suggestedTitle || cleanContent.slice(0, 40) },
+      pendingContext: { step: "note_reminder_offer", noteTitle: suggestedTitle || cleanContent1.slice(0, 40) },
     };
   }
 
   // ─── STEP: note_reminder_time_pending ───
   // Usuário escolheu "lembrete" e está informando o horário
   if (step === "note_reminder_time_pending") {
-    const cleanContent = ctx.cleanContent as string;
+    const cleanContent2 = ctx.cleanContent as string;
     const suggestedTitle = ctx.suggestedTitle as string;
     const tzOff2 = getTzOffset(userTz);
     const nowIso2 = new Date().toLocaleString("sv-SE", { timeZone: userTz }).replace(" ", "T") + tzOff2;
