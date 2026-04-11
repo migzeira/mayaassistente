@@ -3909,11 +3909,17 @@ async function handleReminderSet(
     // Remove o padrão de tempo da mensagem para extrair o título
     const titleWithoutTime = message.replace(/(?:daqui|em)\s+\d+\s*(?:minuto|minutos|min|hora|horas|h)\s+(?:de\s+)?/i, "").trim();
 
+    // Formata remind_at com timezone offset (mesmo formato que Claude usa)
+    const remindAtStr = remindAt.toLocaleString("sv-SE", {
+      timeZone: userTz,
+      hour12: false,
+    }).replace(" ", "T") + tzOff;
+
     // Monta objeto parsed (sem precisar chamar Claude)
     parsed = {
       title: titleWithoutTime || "Lembrete",
       message: `⏰ *Lembrete!*\n${titleWithoutTime || "Lembrete agendado"}`,
-      remind_at: remindAt.toISOString(),
+      remind_at: remindAtStr,
       recurrence: "none",
       recurrence_value: null,
     };
