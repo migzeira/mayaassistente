@@ -132,10 +132,12 @@ export async function sendText(to: string, text: string): Promise<void> {
     number = normalizePhone(to);
   }
 
+  console.log(`[sendText] Tentando enviar pra ${number}, EVOLUTION_URL=${EVOLUTION_URL}, INSTANCE=${INSTANCE}`);
   await evolutionPost(`/message/sendText/${INSTANCE}`, {
     number,
     textMessage: { text },
   });
+  console.log(`[sendText] Sucesso enviando pra ${number}`);
 }
 
 /**
