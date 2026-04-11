@@ -1,14 +1,15 @@
--- Ativa as extensões necessárias
-CREATE EXTENSION IF NOT EXISTS pg_cron;
-CREATE EXTENSION IF NOT EXISTS pg_net;
+-- FIX: Corrige header do CRON job para usar x-cron-secret em vez de Authorization
+-- O problema: CRON estava enviando "Authorization: Bearer ..."
+-- Mas send-reminder espera "x-cron-secret: ..."
+-- Resultado: 401 Unauthorized, nenhum lembrete era enviado
 
--- Remove job antigo se existir
+-- Remove job com header errado
 SELECT cron.unschedule('send-reminders-every-minute')
 WHERE EXISTS (
   SELECT 1 FROM cron.job WHERE jobname = 'send-reminders-every-minute'
 );
 
--- Cria cron job que chama a Edge Function a cada 1 minuto
+-- Recria job com header correto
 SELECT cron.schedule(
   'send-reminders-every-minute',
   '* * * * *',
