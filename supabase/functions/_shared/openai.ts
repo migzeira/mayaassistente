@@ -744,6 +744,9 @@ Regras para remind_at:
 - ATENÇÃO: compare CUIDADOSAMENTE a hora atual com a hora mencionada. Se a hora mencionada ainda NÃO passou hoje, agende para HOJE mesmo.
 - Exemplo: se agora é 01:36 e o usuário disse "1h50", a hora 01:50 ainda não passou → agende para HOJE (não amanhã).
 - Exemplo: se agora é 14:00 e o usuário disse "10h", a hora 10:00 já passou → agende para amanhã.
+- TEMPOS RELATIVOS: "daqui X minutos" / "em X minutos" / "daqui X horas" / "em X horas" → **ADICIONE esse tempo à hora atual para calcular o remind_at**
+  - Ex: "daqui 5 minutos" + agora 14:30 = 14:35
+  - Ex: "em 2 horas" + agora 14:30 = 16:30
 - Se hora mencionada já passou hoje → agendar para amanhã
 - Se não mencionou data → assume hoje (ou amanhã se hora passou)
 - "amanhã" → próximo dia

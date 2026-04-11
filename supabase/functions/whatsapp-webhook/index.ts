@@ -3889,20 +3889,50 @@ async function handleReminderSet(
     };
   }
 
-  // ── Extrai intenção do lembrete com IA ──
-  const parsed = await parseReminderIntent(message, nowIso, lang);
+  // ── Detecta padrão de lembrete relativo: "daqui X minutos" / "em X minutos" ──
+  // Evita dependência de IA para casos simples e reduz latência
+  const msgNormSimple = message.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const relativeTimeMatch = msgNormSimple.match(/(?:daqui|em)\s+(\d+)\s*(minuto|minutos|min|hora|horas|h)\b/i);
 
-  if (!parsed) {
-    return { response: "⚠️ Não entendi o lembrete. Tente: *me lembra de ligar pro João amanhã às 14h*" };
-  }
+  let parsed: any = null;
+  let remindAt: Date = new Date();
 
-  const remindAt = new Date(parsed.remind_at);
-  if (isNaN(remindAt.getTime())) {
-    return { response: "⚠️ Não consegui identificar a data/hora. Pode repetir com mais detalhes?" };
-  }
+  if (relativeTimeMatch) {
+    // ─ Processamento direto: "daqui X minutos" / "em X horas" ─
+    const num = parseInt(relativeTimeMatch[1]);
+    const unit = relativeTimeMatch[2].toLowerCase();
+    const isHour = unit.startsWith("h");
+    const delayMs = isHour ? num * 3600_000 : num * 60_000;
 
-  if (remindAt <= new Date()) {
-    remindAt.setDate(remindAt.getDate() + 1);
+    remindAt = new Date(Date.now() + delayMs);
+
+    // Remove o padrão de tempo da mensagem para extrair o título
+    const titleWithoutTime = message.replace(/(?:daqui|em)\s+\d+\s*(?:minuto|minutos|min|hora|horas|h)\s+(?:de\s+)?/i, "").trim();
+
+    // Monta objeto parsed (sem precisar chamar Claude)
+    parsed = {
+      title: titleWithoutTime || "Lembrete",
+      message: `⏰ *Lembrete!*\n${titleWithoutTime || "Lembrete agendado"}`,
+      remind_at: remindAt.toISOString(),
+      recurrence: "none",
+      recurrence_value: null,
+    };
+  } else {
+    // ─ Processamento via IA: casos complexos ─
+    parsed = await parseReminderIntent(message, nowIso, lang);
+
+    if (!parsed) {
+      return { response: "⚠️ Não entendi o lembrete. Tente: *me lembra de ligar pro João amanhã às 14h*" };
+    }
+
+    remindAt = new Date(parsed.remind_at);
+    if (isNaN(remindAt.getTime())) {
+      return { response: "⚠️ Não consegui identificar a data/hora. Pode repetir com mais detalhes?" };
+    }
+
+    if (remindAt <= new Date()) {
+      remindAt.setDate(remindAt.getDate() + 1);
+    }
   }
 
   // ── Garante que recorrência detectada via regex prevaleça sobre IA ──
