@@ -95,16 +95,27 @@ export async function extractTransactions(
   const prompt = `Extraia transações financeiras do texto abaixo. Retorne JSON com array "transactions".
 Cada item: { "amount": número, "description": string, "type": "expense" ou "income", "category": uma de [${catList}] }
 
-IMPORTANTE: Escolha a categoria que melhor descreve o gasto. Se o usuário tem categorias personalizadas na lista (ex: "pet", "criptomoedas", "assinaturas"), use elas quando fizer sentido. Se nenhuma encaixa, use "outros".
+REGRAS IMPORTANTES:
+1. Se detectar padrão "NÚMERO CATEGORIA" (ex: "340 gasolina", "200 pedagio", "100 bar"), assuma que é um GASTO (expense).
+   - Exemplos: "340 gasolina" = R$ 340 em transporte; "100 uber" = R$ 100 em transporte; "50 netflix" = R$ 50 em lazer
+2. Escolha a categoria que melhor descreve. Se nenhuma encaixa exatamente, mapeie para a mais próxima:
+   - bar, pub, balada → lazer
+   - pedagio, estacionamento → transporte
+   - uber, 99, taxi → transporte
+   - açai, pizza, hamburguer → alimentacao
+   - Se ainda assim não encaixar, use "outros"
+3. Usuário com categorias personalizadas? Use elas quando fizer sentido.
 
 Texto: "${text}"
 
 Exemplos:
+"340 gasolina" → { "amount": 340, "description": "gasolina", "type": "expense", "category": "transporte" }
 "gastei 200 de gasolina" → expense, transporte
+"200 pedagio" → { "amount": 200, "description": "pedagio", "type": "expense", "category": "transporte" }
+"100 bar" → { "amount": 100, "description": "bar", "type": "expense", "category": "lazer" }
 "paguei 500 no mercado" → expense, alimentacao
 "recebi 1000 de freela" → income, trabalho
 "comprei remédio 80 reais" → expense, saude
-"ração pro cachorro 120" → expense, [pet se existir, senão outros]
 
 Responda SOMENTE com o JSON, sem explicações.`;
 
