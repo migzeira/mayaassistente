@@ -99,12 +99,20 @@ export function classifyIntent(msg: string): Intent {
   )
     return "category_list";
 
-  // Deletar/apagar transação (antes de finance_record pra priorizar)
-  // "apaga transação de 50 reais" / "remove o gasto de mercado" / "deleta a ultima transacao"
+  // Deletar/apagar transação (antes de finance_record pra priorizar) — EXPANDIDO
   if (
-    /\b(apaga(r)?|deleta(r)?|remove(r)?|exclui(r)?|cancela(r)?)\s+(a\s+|o\s+|as\s+|os\s+)?(ultima?|ultimo|ultimas?|ultimos)\s+(transacao|transacoes|gasto|gastos|despesa|despesas|receita|receitas|lancamento|lancamentos)\b/.test(m) ||
-    /\b(apaga(r)?|deleta(r)?|remove(r)?|exclui(r)?)\s+(a\s+|o\s+)?(transacao|gasto|despesa|receita|lancamento)\s+(de|do|da)\s+/.test(m) ||
-    /\b(apaga(r)?|deleta(r)?|remove(r)?|exclui(r)?)\s+(aquele|aquela|esse|essa)\s+(gasto|despesa|transacao|receita|lancamento)/.test(m)
+    // Apagar última/últimas transações
+    /\b(apaga(r)?|deleta(r)?|remove(r)?|exclui(r)?|cancela(r)?|tira(r)?)\s+(a\s+|o\s+|as\s+|os\s+)?(ultima?|ultimo|ultimas?|ultimos)\s+(transacao|transacoes|gasto|gastos|despesa|despesas|receita|receitas|lancamento|lancamentos)\b/.test(m) ||
+    // Apagar transação específica: "apaga o gasto de [X]"
+    /\b(apaga(r)?|deleta(r)?|remove(r)?|exclui(r)?|cancela(r)?)\s+(a\s+|o\s+)?(transacao|gasto|despesa|receita|lancamento)\s+(de|do|da)\s+/.test(m) ||
+    // Apagar transação com demonstrativo: "apaga esse/aquele gasto"
+    /\b(apaga(r)?|deleta(r)?|remove(r)?|exclui(r)?|tira(r)?)\s+(aquele|aquela|esse|essa|esse|esta|este)\s+(gasto|despesa|transacao|receita|lancamento|movimento)/.test(m) ||
+    // Variação casual: "tira isso", "remove essa transação"
+    /\b(tira|remove|apaga|deleta)\s+(essa transacao|esse movimento|aquele gasto|essa despesa|essa receita)/.test(m) ||
+    // "desfaz", "cancela o lançamento"
+    /\b(desfaz|desfazer|cancela|cancelo)\s+(o|a)?\s+(lancamento|movimento|transacao|gasto)/.test(m) ||
+    // "não quero esse gasto" / "tira isso"
+    /\b(nao quero|tira|remove|apaga|deleta)\s+(esse|aquele|isso|esse gasto|essa despesa)\b/.test(m)
   )
     return "finance_delete";
 
@@ -129,11 +137,17 @@ export function classifyIntent(msg: string): Intent {
   )
     return "finance_report";
 
-  // Registro financeiro
+  // Registro financeiro — expandido com MUITO mais variações coloquiais
   if (
-    /gastei|comprei|paguei|recebi|ganhei|custou|vale |custa |despesa|despendi|gasei/.test(
-      m
-    )
+    /gastei|comprei|paguei|recebi|ganhei|custou|vale |custa |despesa|despendi|gasei/.test(m) ||
+    // Variações: "gasta", "gastos", "gasto", "tá custando"
+    /\b(gasto|gastos?|tá custando|custou|custa|custa|sai|saiu)\b/.test(m) ||
+    // Frases coloquiais: "só ontem gasto 100", "meu dinheiro tá saindo"
+    /\b(meu|minha)\s+(dinheiro|grana|grana|money)\s+(sai|tá saindo|saiu)/.test(m) ||
+    // "de quanto" — "saiu de quanto ontem?"
+    /\bde quanto\b/.test(m) ||
+    // Números + categorias implícitas: "100 gasolina", "50 almoço"
+    /^\d+\s+(de\s+)?(gasolina|uber|netflix|aluguel|mercado|bar|lancamento|transacao)/i.test(m)
   )
     return "finance_record";
 
@@ -163,20 +177,48 @@ export function classifyIntent(msg: string): Intent {
   )
     return "list_contacts";
 
-  // Enviar mensagem para um contato salvo
+  // Enviar mensagem para um contato salvo — MUITO EXPANDIDO
   // "manda mensagem pra cibele dizendo X" / "manda uma mensagem pro João que..."
   // "fala pra/pro X que..." / "daqui 30min manda pra X..."
+  // "manda msg pra [name] meu amor falando X" / "escreve pra [name] que..."
   if (
-    /\b(manda(r)?|envia(r)?|fala(r)?|diz(er)?|avisa(r)?)\s+(uma?\s+)?(mensagem\s+)?(pra|para|pro|ao?)\s+\w/i.test(m) &&
-    !/\b(lembrete|reminder|me avisa|me lembra)\b/i.test(m)
+    // Formas diretas com verbo + (artigo) + (mensagem) + preposição + nome
+    /\b(manda(r)?|envia(r)?|fala(r)?|diz(er)?|avisa(r)?|escreve(r)?|manda(r)?)\s+(uma?|a)?\s*(mensagem|msg)\s+(pra|para|pro|ao|ó|à|ao)\s+\w/i.test(m) ||
+    // Variação: verbo + preposição + nome (sem "mensagem" explícito)
+    /\b(fala(r)?|diz(er)?|avisa(r)?|conta(r)?|comenta(r)?)\s+(pra|para|pro|ao)\s+\w+\s+(que|dizendo|falando|sobre|com)/i.test(m) ||
+    // "manda pra X dizendo/falando/contando Y"
+    /\b(manda(r)?|envia(r)?|passa(r)?)\s+(pra|para|pro|ao)\s+\w+\s+(dizendo|falando|contando|falando que|dizendo que)/i.test(m) ||
+    // Variação com "meu", "minha" (ex: "manda pro João meu amor")
+    /\b(manda(r)?|envia(r)?|fala(r)?)\s+(pra|para|pro|ao)\s+\w+\s+(meu|minha)\s+\w+\s+(falando|dizendo|que)\b/i.test(m) ||
+    // Imperativo simples: "manda pra [nome]" ou "fala pro [nome]"
+    /^\s*(manda|envia|fala|conta|escreve)\s+(pra|para|pro)\s+\w+/i.test(m)
+  ) &&
+    !/\b(lembrete|reminder|me avisa|me lembra|agenda|marcar|agendar)\b/i.test(m)
   )
     return "send_to_contact";
 
-  // Criar agenda
+  // Criar agenda — EXPANDIDO com mais variações naturais
   if (
-    /marca(r)?( na| uma| pra)? (agenda|reuniao|meeting|compromisso|consulta|evento)|agendar|marcar reuniao|tenho (reuniao|consulta|compromisso|medico|dentista|medica)|colocar na agenda|adicionar na agenda|criar evento|novo compromisso|nova reuniao|nova consulta|novo evento|agenda dia \d|vou ao (medico|dentista|hospital|especialista)|vou a (clinica|consulta)|preciso ir ao (medico|dentista|hospital)|marcar com o (medico|dentista|doutor|dra|dr)/.test(
-      m
-    )
+    // Formas diretas: "marca", "marcar", "agenda", "agendar"
+    /\b(marca(r)?|agenda(r)?)\b.*(reuniao|meeting|consulta|compromisso|evento|appointment|call|chamada)/.test(m) ||
+    // "marcar/agendar com [pessoa]"
+    /\b(marca(r)?|agenda(r)?).*(com|comigo|contigo|pro|pra)\s+\w+/.test(m) ||
+    // "tenho reunião/consulta/compromisso em/no/dia"
+    /\btenho\s+(reuniao|consulta|compromisso|encontro|meeting)\b.*(em|no|dia|amanha|semana)/.test(m) ||
+    // "colocar/adicionar/criar na agenda"
+    /\b(coloca(r)?|adiciona(r)?|cria(r)?|bota(r)?|salva(r)?)\s+(na|em)?\s*(agenda|calendário|calendario)/.test(m) ||
+    // "vou ao médico/dentista/hospital" + indicação de quando
+    /\bvou\s+(ao|a|para o|para a|na)\s+(medico|medica|dentista|hospital|clinica|especialista)\b/.test(m) ||
+    // "preciso ir ao/ir para"
+    /\b(preciso ir|vou|vou ter que ir|tenho que ir)\s+(ao|a|para|na)\s+(medico|dentista|hospital|clinica)/.test(m) ||
+    // "marcar com o médico/dentista"
+    /\b(marca(r)?|agenda(r)?|marca|agenda)\s+(com o|com a|pro|pra)\s+(medico|medica|dentista|doutor|doutora|dr|dra)/.test(m) ||
+    // Palavras-chave diretas
+    /^(reuniao|meeting|compromisso|evento|consulta|encontro)[\s:,]/.test(m) ||
+    // "novo/nova compromisso/reunião/consulta/evento"
+    /\b(novo|nova)\s+(compromisso|reuniao|consulta|evento|meeting|encontro)\b/.test(m) ||
+    // "próxima semana vou ter" / "daqui 3 dias tenho"
+    /\b(proxima|semana|daqui|em|amanha)\b.*(tenho|vou ter|vou fazer|preciso)/.test(m)
   )
     return "agenda_create";
 
@@ -213,27 +255,31 @@ export function classifyIntent(msg: string): Intent {
   )
     return "notes_delete";
 
-  // Salvar nota — cobre formas diretas, casuais e indiretas
+  // Salvar nota — MUITO EXPANDIDO para formas diretas, casuais e indiretas
   if (
     // Formas diretas com palavra-chave no início
     /^(anota|anotacao|anote|salva|escreve|registra|guarda|coloca|bota|grava)[\s:,]/.test(m) ||
-    /^nota[\s:,]|^toma nota\b|^presta atencao\b/.test(m) ||
-    // "anota ai", "salva ai", "guarda isso", "bota ai", "coloca ai", "marca ai"
-    /\b(anota|salva|guarda|escreve|registra|bota|coloca|grava) (ai|isso|aqui|pra mim)\b/.test(m) ||
+    /^nota[\s:,]|^toma nota\b|^presta atencao\b|^memoriza\b|^decora\b/.test(m) ||
+    // "anota ai", "salva ai", "guarda isso", "bota ai", "coloca ai", "marca ai", "salva isso"
+    /\b(anota|salva|guarda|escreve|registra|bota|coloca|grava|memoriza|decora|marca) (ai|isso|aqui|pra mim|isso ai|nisso)\b/.test(m) ||
     // "marca ai" (sem referência à agenda)
     /^marca (ai|isso|aqui|pra mim)\b/.test(m) ||
-    // Formas explícitas de intenção
-    /^(quero|pode|preciso que voce|por favor) (anotar|salvar|registrar|guardar)\b/.test(m) ||
-    /^(pode |por favor )?(anotar|salvar|registrar|guardar) (isso|esse|essa|aqui|ai)\b/.test(m) ||
+    // Formas explícitas de intenção: "quero", "pode", "preciso", "por favor"
+    /^(quero|pode|preciso que voce|por favor) (anotar|salvar|registrar|guardar|escrever|decorar|memorizar)\b/.test(m) ||
+    /^(pode |por favor )?(anotar|salvar|registrar|guardar|escrever|memorizar) (isso|esse|essa|aqui|ai)\b/.test(m) ||
     // "faz/faca/cria uma anotacao/nota pra mim" — imperativo com substantivo
-    /(faz|faca|faça|cria|crie|criar|fazer|me faz|me faca) (uma |a )?(anota(cao|cao|c[aã]o)|nota)\b/.test(m) ||
+    /(faz|faca|faça|cria|crie|criar|fazer|me faz|me faca) (uma |a )?(anota(cao|cao|c[aã]o)|nota|anotacao)\b/.test(m) ||
     // "quero criar/fazer uma nota/anotacao"
-    /(quero|preciso) (criar|fazer|registrar) (uma )?(nota|anotacao)\b/.test(m) ||
+    /(quero|preciso|pode) (criar|fazer|registrar|salvar|escrever) (uma |a )?(nota|anotacao)\b/.test(m) ||
+    // "escreve isso pra mim" / "escreve essa info"
+    /\b(escreve|anota|salva|registra|bota|coloca)\s+(essa|esse|aquela|aquele)\s+(info|informacao|coisa|dados|dado)\b/.test(m) ||
     // título de anotação explícito
-    /titulo (da|de|dessa?) anota(c[aã]o|cao)/.test(m) ||
-    // Frases de contexto
-    /para nao esquecer|pra nao esquecer|nao quero esquecer/.test(m) ||
-    /preciso lembrar|lembrar de /.test(m)
+    /titulo (da|de|dessa?) anota(c[aã]o|cao)|titulo da nota|nome da nota/.test(m) ||
+    // Frases de contexto: "pra não esquecer", "preciso lembrar"
+    /para nao esquecer|pra nao esquecer|nao quero esquecer|guarda isso|salva pra depois/.test(m) ||
+    /preciso lembrar|lembrar de |importante|nao posso esquecer/.test(m) ||
+    // Imperativo casual: "documenta", "puxa aí"
+    /^\b(documenta|puxa|escreve|coloca|guarda|salva)\b.+/i.test(m)
   )
     return "notes_save";
 
@@ -273,47 +319,97 @@ export function classifyIntent(msg: string): Intent {
     /^lembretes?\s+(de|da|do|dessa|desta)?\s*(hoje|amanha|semana|mes)\s*\??$/.test(m)
   ) return "reminder_list";
 
-  // Cancelar lembrete
+  // Cancelar lembrete — EXPANDIDO
   if (
-    /^(cancela|cancelar|remove|apaga|deleta|exclui)\s+(o\s+)?(lembrete|aviso|alarme)\s+(d[eo]\s+)?.+/.test(m) ||
-    /^(cancela|remove|apaga|deleta)\s+lembrete\b/.test(m)
+    // Formas diretas com imperativo
+    /^(cancela|cancelar|remove|apaga|deleta|exclui|tira)\s+(o\s+)?(lembrete|aviso|alarme|notificacao)\s+(d[eo]\s+)?.+/.test(m) ||
+    /^(cancela|remove|apaga|deleta|tira)\s+lembrete\b/.test(m) ||
+    // "cancela esse/aquele lembrete"
+    /\b(cancela|remove|apaga|deleta|exclui|tira)\s+(esse|essa|aquele|aquela)\s+(lembrete|aviso|alarme)/.test(m) ||
+    // "não preciso desse lembrete"
+    /\b(nao preciso|nao quero|tira)\s+(desse|dessa|aquele|aquela)\s+(lembrete|aviso|notificacao)/.test(m) ||
+    // "desfaz o lembrete"
+    /\b(desfaz|desfazer|cancelo)\s+(o|a)?\s+(lembrete|aviso|alarme)/.test(m) ||
+    // Variação casual: "tira isso"
+    /^(tira|apaga|deleta|remove|cancela)\s+(isso|aquilo)\b/.test(m)
   ) return "reminder_cancel";
 
-  // Editar lembrete (muda horário ou dia)
+  // Editar lembrete (muda horário ou dia) — EXPANDIDO
   if (
-    /^(muda|mudar|alterar|altera|atualiza|reagenda|remarca)\s+(o\s+)?(lembrete|aviso)\s+(d[eo]\s+)?.+/.test(m) ||
-    /(lembrete\s+d[eo]\s+.+\s+para?\s+\d)/.test(m)
+    // Formas diretas: "muda", "altera", "reagenda"
+    /^(muda|mudar|alterar|altera|atualiza|reagenda|remarca|atrasa|antecipa)\s+(o\s+)?(lembrete|aviso|notificacao)\s+(d[eo]\s+)?.+/.test(m) ||
+    // "lembrete de X para [tempo]"
+    /(lembrete\s+d[eo]\s+.+\s+para?\s+\d|lembrete\s+para?\s+\d)/.test(m) ||
+    // "muda o horário do lembrete"
+    /\bmuda?\s+(o|a)\s+(hora|horario|dia|data|tempo)\s+(do|da|de)?\s+(lembrete|aviso)/.test(m) ||
+    // "atrasa o lembrete" / "antecipa o lembrete"
+    /\b(atrasa|antecipa|adia|move)\s+(o|a)?\s+(lembrete|aviso|notificacao)/.test(m) ||
+    // "remarca/reagenda o lembrete para"
+    /\b(reagenda|remarca|altera)\s+(o|a)?\s+(lembrete|aviso)\s+(para|pra)/.test(m) ||
+    // Variação casual: "muda pra outro horário"
+    /\b(muda|altera|troca)\s+(pra|para)\s+(outro|outra|um outro|uma outra)\s+(horario|hora|dia|tempo)/.test(m)
   ) return "reminder_edit";
 
-  // Lembrete simples — cobre formas imperativas, subjuntivo e indiretas
+  // Lembrete simples — cobre formas imperativas, subjuntivo e indiretas — EXPANDIDO
   if (
     // Formas diretas: "me lembra", "me lembre", "me avisa", etc.
-    /^me lembra\b|^me lembre\b|^me avisa\b|^me notifica\b/.test(m) ||
+    /^me lembra\b|^me lembre\b|^me avisa\b|^me notifica\b|^me alerta\b/.test(m) ||
     // Formas de criação explícita
-    /^quero um lembrete|^cria(r)? (um )?lembrete|^salva (um )?lembrete|^adiciona (um )?lembrete|^lembrete:/.test(m) ||
+    /^quero um lembrete|^cria(r)? (um )?lembrete|^salva (um )?lembrete|^adiciona (um )?lembrete|^lembrete:|^quero ser lembrado\b/.test(m) ||
     // "me lembra/lembre" em qualquer posição com referência de tempo/assunto
     /\bme lembra (de|que|do|da|desse|disso|às|as|amanha|hoje|semana|todo|toda|daqui|em \d|dia \d|sobre)\b/.test(m) ||
     /\bme lembre (de|que|do|da|desse|disso|às|as|amanha|hoje|semana|todo|toda|daqui|em \d|dia \d|sobre)\b/.test(m) ||
     /\bme avisa (às|as|quando|amanha|hoje|dia \d|daqui)\b/.test(m) ||
+    // Variações: "te lembra", "você me lembra", "me notifica", "me alerta"
+    /\bme notifica (de|que|às|amanha|daqui)\b/.test(m) ||
+    /\bme alerta (de|que|para|sobre|daqui)\b/.test(m) ||
     // Formas indiretas: "voce me lembra", "quero que voce me lembra/lembre"
-    /\b(voce|você) me (lembra|lembre)\b/.test(m) ||
-    /(quero que|pode|preciso que).*(me lembra|me lembre|me avisa)\b/.test(m)
+    /\b(voce|você) me (lembra|lembre|avisa|notifica|alerta)\b/.test(m) ||
+    /(quero que|pode|preciso que|por favor).*(me lembra|me lembre|me avisa|me notifica|me alerta)\b/.test(m) ||
+    // "nao quero esquecer de" + tempo/assunto
+    /\b(nao quero esquecer|preciso lembrar|lembrar de|tenho que lembrar)\b.*(daqui|em \d|amanha|hoje)\b/.test(m)
   ) return "reminder_set";
 
   // Buscar evento específico
   if (/voce lembra (do|da|de) (meu|minha)|lembra (do|da|de) (meu|minha)|tem (meu|minha) .{2,30} marcad|qual (e|é) (meu|minha)|quando (e|é) (meu|minha)|tem algo (marcado|agendado) (dia|no dia|para)/.test(m))
     return "agenda_lookup";
 
-  // Cancelar/excluir evento direto (sem edição)
+  // Cancelar/excluir evento direto (sem edição) — EXPANDIDO
   if (
-    /^(cancela|exclui|apaga|deleta|remove|desmarca)\s+(meu|minha|o|a)?\s*.{2,40}$/.test(m) ||
-    /nao vou mais (ao|a|para o|para a|ao |a )\s*.{2,30}/.test(m) ||
-    /(cancela|exclui|apaga|deleta|desmarca) (o evento|a reuniao|o compromisso|a consulta|o|a)\s+.{2,30}/.test(m)
+    // Formas diretas com imperativo
+    /^(cancela|exclui|apaga|deleta|remove|desmarca|tira)\s+(meu|minha|o|a)?\s*.{2,40}$/.test(m) ||
+    // "não vou mais ao/a/para"
+    /\b(nao vou mais|nao vou|cancela|cancelei|exclui|apaguei)\s+(ao|a|para o|para a|na|no)\s+.{2,30}/.test(m) ||
+    // "cancela/deleta o evento/reunião/compromisso/consulta"
+    /(cancela|exclui|apaga|deleta|desmarca|tira)\s+(o evento|a reuniao|o compromisso|a consulta|a consulta com|o evento de|a reuniao de|o|a)\s+.{2,30}/.test(m) ||
+    // "remove esse/aquele compromisso/evento"
+    /(cancela|remove|apaga|deleta|exclui)\s+(esse|essa|aquele|aquela|meu|minha)\s+(compromisso|evento|reuniao|consulta|encontro|meeting)/.test(m) ||
+    // "não preciso mais ir" / "não tenho mais"
+    /\b(nao preciso|nao vou|nao tenho mais)\s+(ir|comparecer|ir ao|ir para)/.test(m) ||
+    // "cancela tudo" / "tira esse agendamento"
+    /\b(cancela tudo|tira esse|remove isso|apaga isso)\b/.test(m)
   )
     return "agenda_delete";
 
-  // Editar/remarcar evento
-  if (/(mudei|muda|mude|alterei|altera|altere|remarca|remarcar|atualiza|cancela|cancelar|excluir|deletar|mover) .{0,20}(dia|hora|horario|data|evento|compromisso|reuniao|consulta)|mudei de (data|dia|horario|hora)|nao e mais (dia|hora)|e (dia|hora) \d|muda (o|a) (dia|hora|horario|data)/.test(m))
+  // Editar/remarcar evento — EXPANDIDO
+  if (
+    // Formas diretas: "muda", "altera", "remarca", "atrasa", "antecipa"
+    /(mudei|muda|mude|alterei|altera|altere|remarca|remarcar|atualiza|atrasa|antecipa|adia)\s+.{0,20}(dia|hora|horario|data|evento|compromisso|reuniao|consulta)/.test(m) ||
+    // "mudei de data/dia/hora"
+    /\bmudei\s+(de|pra|para)\s+(data|dia|hora|horario)/.test(m) ||
+    // "não é mais [dia/hora]"
+    /\bnao\s+(e|é|será)\s+mais\s+(dia|hora|amanha|segunda)/.test(m) ||
+    // "[evento] agora é [dia/hora]" / "[evento] mudou para [dia/hora]"
+    /\b(agora|mudou|fica|fica para)\s+(e|é|pra|para)\s+(dia|hora|\d+)/.test(m) ||
+    // "muda o dia/hora/horário"
+    /\bmuda?\s+(o|a)\s+(dia|hora|horario|data)/i.test(m) ||
+    // "move pra outro dia" / "atrasa a reunião"
+    /\b(move|move|atrasa|antecipa|adia)\s+(pra|para|em|no)\s+.{2,20}/.test(m) ||
+    // "preciso reagendar" / "preciso remarcar"
+    /\b(preciso|vou)\s+(reagendar|remarcar|adiar|antecip|mover)/.test(m) ||
+    // "trocar o dia/hora de"
+    /\b(trocar|mudar|alterar)\s+(o|a)\s+(dia|hora|horario)\s+(de|do|da)/.test(m)
+  )
     return "agenda_edit";
 
   return "ai_chat";
