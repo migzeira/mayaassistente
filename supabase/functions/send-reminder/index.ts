@@ -164,15 +164,14 @@ function nextOccurrence(
 }
 
 serve(async (req) => {
-  // Função interna chamada apenas pelo pg_cron.
-  // TEMPORARIAMENTE desabilitado para debug
-  // const cronSecret = Deno.env.get("CRON_SECRET") ?? "";
-  // if (cronSecret) {
-  //   const headerSecret = req.headers.get("x-cron-secret") ?? "";
-  //   if (headerSecret !== cronSecret) {
-  //     return new Response("Unauthorized", { status: 401 });
-  //   }
-  // }
+  // Log every single invocation to debug table
+  try {
+    await supabase.from("debug_logs").insert({
+      message: `[SEND-REMINDER] Invoked at ${new Date().toISOString()} - Method: ${req.method}`
+    });
+  } catch (e) {
+    console.error("[DEBUG] Failed to log invocation:", e);
+  }
 
   console.log(`[CRON] send-reminder triggered at ${new Date().toISOString()}`);
 
