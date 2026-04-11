@@ -3685,8 +3685,8 @@ async function handleReminderCancel(
   });
 
   if (!match) {
-    const list = reminders.slice(0, 4).map(r => `• ${r.title || r.message.slice(0, 40)}`).join("\n");
-    return `Não encontrei esse lembrete. Seus pendentes:\n\n${list}\n\nTente o nome exato.`;
+    const listFallback = reminders.slice(0, 4).map(r => `• ${r.title || r.message.slice(0, 40)}`).join("\n");
+    return `Não encontrei esse lembrete. Seus pendentes:\n\n${listFallback}\n\nTente o nome exato.`;
   }
 
   // Cancela este e todas as recorrências futuras com o mesmo título
