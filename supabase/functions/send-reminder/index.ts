@@ -293,7 +293,10 @@ serve(async (_req) => {
             habit_id: reminder.habit_id ?? null,
           } as any);
           if (nextErr) {
-            console.error(`[send-reminder] Failed to schedule next occurrence for ${reminder.id}:`, nextErr.message);
+            // 23505 = unique violation → já existe reminder pendente pro mesmo horário (dedup OK, ignora)
+            if (nextErr.code !== "23505") {
+              console.error(`[send-reminder] Failed to schedule next occurrence for ${reminder.id}:`, nextErr.message);
+            }
           } else {
             scheduled++;
           }
