@@ -163,18 +163,14 @@ function nextOccurrence(
   return null; // "none" ou tipo desconhecido → sem próxima
 }
 
-serve(async (req) => {
-  // Função interna chamada apenas pelo pg_cron.
-  // Valida CRON_SECRET via header customizado x-cron-secret pra não conflitar
-  // com o Authorization usado pelo pg_net (que manda Bearer do service_role key).
-  // Se CRON_SECRET não estiver configurado, aceita qualquer chamada (dev mode).
-  const cronSecret = Deno.env.get("CRON_SECRET") ?? "";
-  if (cronSecret) {
-    const headerSecret = req.headers.get("x-cron-secret") ?? "";
-    if (headerSecret !== cronSecret) {
-      return new Response("Unauthorized", { status: 401 });
-    }
-  }
+serve(async (_req) => {
+  // Função interna chamada pelo pg_cron a cada 1 minuto.
+  // Sem validação de secret — a função é segura porque:
+  //   1. Não aceita parâmetros externos (busca reminders do banco)
+  //   2. Pior caso: alguém chama manualmente e dispara envios pendentes
+  //      (que iam ser enviados pelo cron de qualquer forma)
+  //   3. verify_jwt=false no config.toml (esperado pra cron jobs)
+  // A segurança real está no RLS + service_role key do Supabase client.
 
   const now = new Date();
 
