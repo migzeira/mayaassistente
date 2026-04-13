@@ -53,9 +53,13 @@ function formatBrasilia(isoString: string): string {
 }
 
 // Retorna o grupo de data para um lembrete pendente (em BRT)
+// Margem de 2 minutos pra não mostrar "Atrasado" em lembrete que o cron
+// ainda não processou (cron roda a cada 30s, lembrete pode estar pendente
+// por até ~30s sem ser realmente "atrasado").
 function getDateGroup(sendAt: string): string {
   const now = new Date();
-  if (new Date(sendAt) < now) return "Atrasado";
+  const marginMs = 2 * 60 * 1000; // 2 minutos de margem
+  if (new Date(sendAt).getTime() + marginMs < now.getTime()) return "Atrasado";
   const todayBRT = now.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
   const tomorrowBRT = new Date(now.getTime() + 86400000).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
   const weekEndBRT = new Date(now.getTime() + 7 * 86400000).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
@@ -92,7 +96,10 @@ function recurrenceLabel(r: Reminder) {
 function statusBadge(status: string, sendAt: string) {
   if (status === "sent") return <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-[10px]"><CheckCircle2 className="w-3 h-3 mr-1" />Enviado</Badge>;
   if (status === "failed") return <Badge variant="destructive" className="text-[10px]"><XCircle className="w-3 h-3 mr-1" />Falhou</Badge>;
-  if (isPast(new Date(sendAt))) return <Badge variant="secondary" className="text-[10px]">Atrasado</Badge>;
+  // Mostra "Atrasado" só se passou mais de 2 min do send_at (margem pro cron processar)
+  // Dentro da margem mostra "Pendente" porque o cron pode estar processando agora
+  const marginMs = 2 * 60 * 1000;
+  if (new Date(sendAt).getTime() + marginMs < Date.now()) return <Badge variant="secondary" className="text-[10px]">Atrasado</Badge>;
   return <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-[10px]"><Clock className="w-3 h-3 mr-1" />Pendente</Badge>;
 }
 
