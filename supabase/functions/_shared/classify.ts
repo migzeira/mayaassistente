@@ -215,14 +215,18 @@ export function classifyIntent(msg: string): Intent {
   )
     return "agenda_query";
 
-  // Listar notas/anotações
+  // Listar notas/anotações — gatilhos expandidos
   // Após NFD normalize: "anotações" → "anotacoes", "anotação" → "anotacao"
-  // Usa "anotac" (prefixo) sem \b no final — "anotac" matcha "anotacao" e "anotacoes"
+  // Usa "anotac" (prefixo) sem \b no final — matcha "anotacao" e "anotacoes"
   if (
-    /\b(quais|mostra|mostrar|lista|listar|ver|veja|mostre|me fala|me mostra|me diz)\b.{0,25}(anotac|notas?)/.test(m) ||
+    /\b(quais|mostra|mostrar|lista|listar|ver|veja|mostre|me fala|me mostra|me diz|exib[ei]|abre|abrir)\b.{0,25}(anotac|notas?)/.test(m) ||
     /\bminhas?\s+(anotac|notas)/.test(m) ||
     /^(minhas?\s+)?(anotac\w*|notas)\s*\??$/.test(m) ||
-    /\b(tenho|tem)\s+.{0,15}(anotac|notas?)/.test(m)
+    /\b(tenho|tem)\s+.{0,15}(anotac|notas?)/.test(m) ||
+    /\bo que\s+(eu\s+)?(anotei|salvei|registrei|guardei)\b/.test(m) ||
+    /\bo que\s+(ta|esta)\s+(anotado|salvo|registrado)\b/.test(m) ||
+    /\b(quero|preciso|posso)\s+(ver|consultar|acessar)\s+.{0,15}(anotac|notas?)/.test(m) ||
+    /\bresumo\s+(das?\s+|de\s+)?(anotac|notas)/.test(m)
   )
     return "notes_list";
 

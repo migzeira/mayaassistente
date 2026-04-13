@@ -1520,13 +1520,29 @@ async function handleNotesList(userId: string): Promise<string> {
   }
 
   const lines = notes.map((n: any, i: number) => {
-    const title = n.title || n.content?.slice(0, 50) || "Sem título";
     const dateStr = new Date(n.created_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" });
     const sourceBadge = (n.source === "whatsapp" || n.source === "whatsapp_forward") ? " 📱" : "";
-    return `*${i + 1}.* ${title}${sourceBadge} — ${dateStr}`;
+
+    // Mostra título se tiver, senão mostra conteúdo (até 200 chars pra notas longas)
+    let display = "";
+    if (n.title) {
+      display = `*${n.title}*`;
+      // Se tem conteúdo diferente do título, mostra preview abaixo
+      if (n.content && n.content !== n.title) {
+        const preview = n.content.slice(0, 200).replace(/\n/g, " ");
+        display += `\n   ${preview}${n.content.length > 200 ? "..." : ""}`;
+      }
+    } else if (n.content) {
+      const preview = n.content.slice(0, 200);
+      display = preview + (n.content.length > 200 ? "..." : "");
+    } else {
+      display = "_Sem conteúdo_";
+    }
+
+    return `*${i + 1}.* ${display}${sourceBadge} — ${dateStr}`;
   });
 
-  return `📝 *Suas anotações (${notes.length} mais recentes):*\n\n${lines.join("\n")}\n\n_Pra ver detalhes, acesse o app. Pra apagar, diga "apaga a nota sobre X"._`;
+  return `📝 *Suas anotações (${notes.length} mais recentes):*\n\n${lines.join("\n\n")}\n\n_Pra apagar, diga "apaga a nota sobre X"._`;
 }
 
 async function handleNotesDelete(
