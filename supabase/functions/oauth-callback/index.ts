@@ -14,8 +14,8 @@ const supabase = createClient(
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const CALLBACK_URL = `${SUPABASE_URL}/functions/v1/oauth-callback`;
 
-// URL fixa de redirect — no futuro, para app nativo: minhamaya://integracoes
-const DASHBOARD_URL = "https://minhamaya.com/dashboard/integracoes";
+// URL fixa de redirect — no futuro, para app nativo: heyjarvis://integracoes
+const DASHBOARD_URL = "https://heyjarvis.com.br/dashboard/integracoes";
 
 async function getSetting(key: string): Promise<string> {
   const { data } = await supabase

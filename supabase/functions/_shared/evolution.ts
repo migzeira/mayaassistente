@@ -155,7 +155,7 @@ export async function sendButtons(
   title: string,
   description: string,
   buttons: Array<{ id: string; text: string }>,
-  footer = "Maya"
+  footer = "Jarvis"
 ): Promise<void> {
   let number: string;
 

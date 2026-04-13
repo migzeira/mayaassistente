@@ -54,7 +54,7 @@ export default function Contatos() {
     if (user) load();
   }, [user]);
 
-  // Realtime: aparece na tela imediatamente quando Maya salva pelo WhatsApp
+  // Realtime: aparece na tela imediatamente quando Jarvis salva pelo WhatsApp
   useEffect(() => {
     if (!user) return;
 
@@ -202,7 +202,7 @@ export default function Contatos() {
       </div>
 
       <p className="text-sm text-muted-foreground">
-        Compartilhe um contato do WhatsApp com a Maya e ela salva automaticamente aqui — em tempo real. Depois é só pedir:{" "}
+        Compartilhe um contato do WhatsApp com o Jarvis e ele salva automaticamente aqui — em tempo real. Depois é só pedir:{" "}
         <em>"Marca reunião com [Nome]"</em> ou <em>"Manda mensagem pra [Nome] dizendo..."</em>
       </p>
 
@@ -254,7 +254,7 @@ export default function Contatos() {
             <p className="text-sm">
               {search
                 ? "Nenhum contato encontrado."
-                : "Nenhum contato ainda. Compartilhe um contato do WhatsApp com a Maya para começar!"}
+                : "Nenhum contato ainda. Compartilhe um contato do WhatsApp com o Jarvis para começar!"}
             </p>
           </CardContent>
         </Card>

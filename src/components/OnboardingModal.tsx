@@ -9,20 +9,20 @@ import { ChevronLeft, ChevronRight, X } from "lucide-react";
 const SLIDES = [
   {
     emoji: "👋",
-    title: "Bem-vindo à Minha Maya!",
+    title: "Bem-vindo ao Hey Jarvis!",
     subtitle: "Sua assistente pessoal inteligente via WhatsApp",
     content: (
       <div className="space-y-3 text-sm text-muted-foreground">
         <p>
-          A Maya é uma IA que você controla <strong className="text-foreground">pelo WhatsApp</strong> — sem app pra instalar, sem interface complicada.
+          O Jarvis é uma IA que você controla <strong className="text-foreground">pelo WhatsApp</strong> — sem app pra instalar, sem interface complicada.
         </p>
         <p>
           Fale com ela em linguagem natural, como faria com uma assistente humana. Ela entende contexto, lembra do que você disse e age de verdade.
         </p>
         <div className="bg-accent/40 rounded-lg p-3 text-xs font-mono">
-          <p className="text-violet-400">Você → Maya:</p>
-          <p className="text-foreground mt-1">"Oi Maya, tudo bem?"</p>
-          <p className="text-violet-400 mt-2">Maya → Você:</p>
+          <p className="text-violet-400">Você → Jarvis:</p>
+          <p className="text-foreground mt-1">"Oi Jarvis, tudo bem?"</p>
+          <p className="text-violet-400 mt-2">Jarvis → Você:</p>
           <p className="text-foreground mt-1">"Tudo ótimo! Como posso te ajudar hoje? 😊"</p>
         </div>
       </div>
@@ -44,8 +44,8 @@ const SLIDES = [
           {
             step: "2",
             done: false,
-            title: 'Mande "oi" para o número da Maya',
-            desc: "A Maya vai te responder automaticamente e perguntar seu nome",
+            title: 'Mande "oi" para o número do Jarvis',
+            desc: "O Jarvis vai te responder automaticamente e perguntar seu nome",
           },
           {
             step: "3",
@@ -70,7 +70,7 @@ const SLIDES = [
   {
     emoji: "📅",
     title: "Agenda & Compromissos",
-    subtitle: "A Maya organiza sua agenda pelo WhatsApp",
+    subtitle: "O Jarvis organiza sua agenda pelo WhatsApp",
     content: (
       <div className="space-y-3">
         <p className="text-sm text-muted-foreground">Fale naturalmente — ela entende datas, horários e detalhes:</p>
@@ -88,7 +88,7 @@ const SLIDES = [
           ))}
         </div>
         <p className="text-xs text-muted-foreground">
-          💡 A Maya avisa quando há conflito de horário e pergunta como resolver.
+          💡 O Jarvis avisa quando há conflito de horário e pergunta como resolver.
         </p>
       </div>
     ),
@@ -99,7 +99,7 @@ const SLIDES = [
     subtitle: "Nunca mais esqueça nada importante",
     content: (
       <div className="space-y-3">
-        <p className="text-sm text-muted-foreground">A Maya te manda uma mensagem no horário certo:</p>
+        <p className="text-sm text-muted-foreground">O Jarvis te manda uma mensagem no horário certo:</p>
         <div className="space-y-2">
           {[
             "\"Me lembra de ligar para o banco às 15h\"",
@@ -152,7 +152,7 @@ const SLIDES = [
     subtitle: "Capture ideias e informações na hora",
     content: (
       <div className="space-y-3">
-        <p className="text-sm text-muted-foreground">A Maya salva e organiza suas anotações automaticamente:</p>
+        <p className="text-sm text-muted-foreground">O Jarvis salva e organiza suas anotações automaticamente:</p>
         <div className="space-y-2">
           {[
             "\"Anota: ideia para o projeto X\"",
@@ -176,11 +176,11 @@ const SLIDES = [
   {
     emoji: "🌅",
     title: "Resumo Diário",
-    subtitle: "Toda manhã às 8h a Maya te manda um resumo",
+    subtitle: "Toda manhã às 8h o Jarvis te manda um resumo",
     content: (
       <div className="space-y-3">
         <p className="text-sm text-muted-foreground">
-          Automaticamente, a Maya envia um resumo personalizado com:
+          Automaticamente, o Jarvis envia um resumo personalizado com:
         </p>
         <div className="space-y-2">
           {[
@@ -205,7 +205,7 @@ const SLIDES = [
   {
     emoji: "🤖",
     title: "Personalização do Agente",
-    subtitle: "Faça a Maya do seu jeito",
+    subtitle: "Faça o Jarvis do seu jeito",
     content: (
       <div className="space-y-3">
         <p className="text-sm text-muted-foreground">
@@ -213,7 +213,7 @@ const SLIDES = [
         </p>
         <div className="space-y-2">
           {[
-            { icon: "👤", text: "Como a Maya te chama (apelido)" },
+            { icon: "👤", text: "Como o Jarvis te chama (apelido)" },
             { icon: "🎭", text: "Tom de voz: formal, casual ou direto" },
             { icon: "🌅", text: "Ativar/desativar o resumo matinal" },
             { icon: "💬", text: "Contexto sobre você (trabalho, rotina, preferências)" },
@@ -238,7 +238,7 @@ const SLIDES = [
     content: (
       <div className="space-y-4 text-sm text-muted-foreground">
         <p>
-          A Maya aprende com o tempo e fica cada vez mais personalizada para a sua rotina.
+          O Jarvis aprende com o tempo e fica cada vez mais personalizado para a sua rotina.
         </p>
         <div className="bg-gradient-to-r from-violet-500/10 to-purple-500/10 border border-violet-500/20 rounded-lg p-4 space-y-2">
           <p className="text-foreground font-semibold text-sm">Resumo rápido:</p>

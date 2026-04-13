@@ -66,7 +66,7 @@ serve(async (req) => {
     const message =
       `Oi, ${name}! 👋\n\n` +
       `Já faz um tempo que não te vejo por aqui. Tudo bem?\n\n` +
-      `Sou a *Maya*, sua assistente pessoal, e estou aqui pra ajudar!\n\n` +
+      `Sou o *Jarvis*, seu assistente pessoal, e estou aqui pra ajudar!\n\n` +
       `Me chama aqui sempre que precisar:\n` +
       `📝 *Anotar* algo importante\n` +
       `⏰ *Criar um lembrete*\n` +

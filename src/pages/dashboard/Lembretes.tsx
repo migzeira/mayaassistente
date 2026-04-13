@@ -280,7 +280,7 @@ export default function Lembretes() {
       case "sent":
         return {
           title: "Nenhum lembrete enviado ainda.",
-          subtitle: "Os lembretes enviados aparecerão aqui após o disparo pela Maya.",
+          subtitle: "Os lembretes enviados aparecerão aqui após o disparo pelo Jarvis.",
         };
       case "recurring":
         return {
@@ -308,7 +308,7 @@ export default function Lembretes() {
             <LiveBadge isLive={isLive} className="ml-2" />
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            A Maya te avisa no WhatsApp no horário certo — mesmo com o app fechado.
+            O Jarvis te avisa no WhatsApp no horário certo — mesmo com o app fechado.
           </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>

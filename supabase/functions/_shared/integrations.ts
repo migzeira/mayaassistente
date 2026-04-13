@@ -40,7 +40,7 @@ async function notifyIntegrationExpired(
 
     await sendText(
       phone,
-      `⚠️ *Integração expirou*\n\nSua conexão com *${providerLabel}* expirou e foi desconectada automaticamente.\n\nReconecte em *Integrações* no app da Minha Maya pra voltar a sincronizar.`
+      `⚠️ *Integração expirou*\n\nSua conexão com *${providerLabel}* expirou e foi desconectada automaticamente.\n\nReconecte em *Integrações* no app do Hey Jarvis pra voltar a sincronizar.`
     );
 
     // Marca dedup no metadata

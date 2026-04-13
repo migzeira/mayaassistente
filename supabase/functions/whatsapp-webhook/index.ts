@@ -624,7 +624,7 @@ Frase: "${message}"`;
   const typeLabel = parsed.type === "income" ? "Receita" : "Gasto";
   const nextFormatted = new Date(nextDate + "T12:00:00").toLocaleDateString("pt-BR", { day: "numeric", month: "long" });
 
-  return `✅ *${typeLabel} recorrente criado!*\n\n${emoji} ${parsed.description}\n💰 R$ ${parsed.amount.toFixed(2).replace(".", ",")}\n🔁 Frequência: ${freqLabels[parsed.frequency] || parsed.frequency}\n📅 Próxima cobrança: ${nextFormatted}\n\nSerá registrado automaticamente. Gerencie no app Minha Maya.`;
+  return `✅ *${typeLabel} recorrente criado!*\n\n${emoji} ${parsed.description}\n💰 R$ ${parsed.amount.toFixed(2).replace(".", ",")}\n🔁 Frequência: ${freqLabels[parsed.frequency] || parsed.frequency}\n📅 Próxima cobrança: ${nextFormatted}\n\nSerá registrado automaticamente. Gerencie no app Hey Jarvis.`;
 }
 
 // ─────────────────────────────────────────────
@@ -810,7 +810,7 @@ async function handleFinanceRecord(
   userTz = "America/Sao_Paulo"
 ): Promise<string> {
   // Busca categorias do usuário (default + custom criadas via app)
-  // pra que a Maya reconheça categorias personalizadas como "Pet", "Criptomoedas" etc
+  // pra que o Jarvis reconheça categorias personalizadas como "Pet", "Criptomoedas" etc
   const { data: userCatsData } = await supabase
     .from("categories")
     .select("name")
@@ -1250,7 +1250,7 @@ async function handleFinanceReport(
     }
   } catch { /* silently skip budget info */ }
 
-  report += `\n\n📱 Ver detalhes completos no app Minha Maya`;
+  report += `\n\n📱 Ver detalhes completos no app Hey Jarvis`;
 
   // Gera URL do grafico doughnut (nao-bloqueante: se falhar, envia so texto)
   let chartUrl: string | null = null;
@@ -3586,34 +3586,34 @@ serve(async (req) => {
 
   const isForwarded = !!(ctxInfo?.isForwarded) || ((ctxInfo?.forwardingScore as number ?? 0) > 0);
 
-  // ─── Detecção de reply em mensagem cross-Maya ────────────────────────────
-  // Quando um usuário Maya recebe msg enviada pela Maya de outro cliente e
+  // ─── Detecção de reply em mensagem cross-Jarvis ────────────────────────────
+  // Quando um usuário Jarvis recebe msg enviada pelo Jarvis de outro cliente e
   // responde via botão de reply, o quotedMessage vai conter nossa assinatura.
   const quotedMsg = ctxInfo?.quotedMessage as Record<string, unknown> | undefined;
   const quotedText: string =
     (quotedMsg?.conversation as string) ??
     ((quotedMsg?.extendedTextMessage as Record<string, unknown>)?.text as string) ??
     "";
-  const isCrossMayaReply =
-    quotedText.includes("minhamaya.com") ||
+  const isCrossJarvisReply =
+    quotedText.includes("heyjarvis.com.br") ||
     quotedText.includes("assistente virtual do") ||
     quotedText.includes("assistente virtual de");
 
-  if (isCrossMayaReply) {
-    // Checa se o remetente é um usuário registrado da Minha Maya
+  if (isCrossJarvisReply) {
+    // Checa se o remetente é um usuário registrado do Hey Jarvis
     const { profile: senderProfile } = await resolveProfileForShadow(replyTo, lid);
     if (senderProfile) {
-      // É um cliente Maya! Manda a mensagem especial e encerra sem processar como intent normal
+      // É um cliente Jarvis! Manda a mensagem especial e encerra sem processar como intent normal
       const firstName = pushName?.split(" ")[0] || "você";
       await sendText(replyTo,
         `Que coincidência, *${firstName}*! 😄\n\n` +
-        `Você acabou de receber uma mensagem enviada pelo agente de outro cliente da *Minha Maya*! 🤖✨\n\n` +
+        `Você acabou de receber uma mensagem enviada pelo agente de outro cliente do *Hey Jarvis*! 🤖✨\n\n` +
         `Somos todos família por aqui! haha\n\n` +
         `Posso te ajudar com mais alguma coisa? 😊`
       );
       return new Response("OK");
     }
-    // Não é usuário Maya → ignora silenciosamente (já é o comportamento padrão)
+    // Não é usuário Jarvis → ignora silenciosamente (já é o comportamento padrão)
     return new Response("OK");
   }
 
@@ -4728,16 +4728,16 @@ async function handleContactMessage(
 }
 
 /**
- * Monta o rodapé de apresentação da Maya enviado a contatos externos.
- * Inclui número do usuário (para responder diretamente) + CTA minhamaya.com.
+ * Monta o rodapé de apresentação do Jarvis enviado a contatos externos.
+ * Inclui número do usuário (para responder diretamente) + CTA heyjarvis.com.br.
  */
-function buildMayaCTA(userName: string, userPhone: string): string {
+function buildJarvisCTA(userName: string, userPhone: string): string {
   return (
     `\n\n_——————————_\n` +
     `Para falar diretamente com *${userName}*, o número é: *${userPhone}*\n\n` +
     `Quer ter uma assistente virtual igual a mim? 🤖✨\n` +
-    `Acesse 👉 *minhamaya.com* e descubra tudo que posso fazer por você diretamente no WhatsApp — agendamentos, finanças, lembretes e muito mais!\n\n` +
-    `Até mais! 🤍\n*— Maya*`
+    `Acesse 👉 *heyjarvis.com.br* e descubra tudo que posso fazer por você diretamente no WhatsApp — agendamentos, finanças, lembretes e muito mais!\n\n` +
+    `Até mais! 🤍\n*— Jarvis*`
   );
 }
 
@@ -4881,7 +4881,7 @@ async function handleSendToContact(
     `Aqui é a *${agentName}*, assistente virtual do *${senderName}*.\n\n` +
     `Ele(a) me pediu para te passar um recado:\n\n` +
     `💬 _"${msgContent}"_` +
-    buildMayaCTA(senderName, userPhone);
+    buildJarvisCTA(senderName, userPhone);
 
   if (delayMs > 0) {
     const sendAt = new Date(Date.now() + delayMs).toISOString();
@@ -5038,7 +5038,7 @@ async function handleScheduleMeeting(
     `Ele(a) pediu para marcar uma reunião com você:\n\n` +
     `📅 *${dateLabel}*${timeLabel}` +
     (meetLink ? `\n🔗 *Link da reunião:*\n${meetLink}` : "") +
-    buildMayaCTA(senderName, userPhone);
+    buildJarvisCTA(senderName, userPhone);
 
   sendText(found.phone, contactMsg).catch(() => {});
 
@@ -5359,8 +5359,8 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
   const t0 = Date.now(); // timing para bot_metrics
   let currentIntent = "";
   try {
-    // ── Fluxo de vinculação: usuário enviou código MAYA-XXXXXX ──
-    const linkMatch = text.trim().match(/^MAYA[-\s]?([A-Z0-9]{6})$/i);
+    // ── Fluxo de vinculação: usuário enviou código JARVIS-XXXXXX ──
+    const linkMatch = text.trim().match(/^JARVIS[-\s]?([A-Z0-9]{6})$/i);
     if (linkMatch) {
       const code = linkMatch[1].toUpperCase();
       log.push(`link_attempt: ${code}`);
@@ -5385,12 +5385,12 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
       };
 
       if (!profileByCode) {
-        await replyToUser("❌ Código inválido. Gere um novo código no app Minha Maya em *minhamaya.com/dashboard/perfil*.");
+        await replyToUser("❌ Código inválido. Gere um novo código no app Hey Jarvis em *heyjarvis.com.br/dashboard/perfil*.");
         return log;
       }
 
       if (profileByCode.link_code_expires_at && new Date(profileByCode.link_code_expires_at) < new Date()) {
-        await replyToUser("⏰ Código expirado. Gere um novo no app Minha Maya.");
+        await replyToUser("⏰ Código expirado. Gere um novo no app Hey Jarvis.");
         return log;
       }
 
@@ -5401,7 +5401,7 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
         link_code_expires_at: null,
       }).eq("id", profileByCode.id);
 
-      await replyToUser("✅ *WhatsApp vinculado com sucesso!*\n\nAgora pode usar a Minha Maya normalmente. Tente:\n• _gastei 50 reais de almoço_\n• _reunião amanhã às 14h_\n• _me lembra de ligar pro Pedro segunda_");
+      await replyToUser("✅ *WhatsApp vinculado com sucesso!*\n\nAgora pode usar o Hey Jarvis normalmente. Tente:\n• _gastei 50 reais de almoço_\n• _reunião amanhã às 14h_\n• _me lembra de ligar pro Pedro segunda_");
       log.push("linked!");
       return log;
     }
@@ -5469,7 +5469,7 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
           .maybeSingle();
         if (data) {
           profile = data;
-          // Salva o LID no perfil automaticamente para lookups futuros (sem precisar de código MAYA)
+          // Salva o LID no perfil automaticamente para lookups futuros (sem precisar de código JARVIS)
           supabase
             .from("profiles")
             .update({ whatsapp_lid: lid })
@@ -5482,14 +5482,14 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
     }
 
     // Flag: se vinculamos neste request, mandamos mensagem de boas-vindas
-    // em vez de processar a mensagem original (geralmente "oi" que o Maya não entenderia)
+    // em vez de processar a mensagem original (geralmente "oi" que o Jarvis não entenderia)
     let justLinkedViaPending = false;
 
     // Fallback PRINCIPAL pra clientes com LID opaco: pending_whatsapp_link ativo
     // Quando cliente cadastra phone no MeuPerfil, whatsapp-link-init grava um
     // pending_link com janela de 15 min. Se houver EXATAMENTE 1 pending ativo
     // quando esta mensagem chega, vinculamos automaticamente — cliente só
-    // precisa responder "oi" ou qualquer coisa, sem precisar de código MAYA.
+    // precisa responder "oi" ou qualquer coisa, sem precisar de código JARVIS.
     if (!profile && lid) {
       const { data: pendingLinks } = await (supabase as any)
         .from("pending_whatsapp_links")
@@ -5557,7 +5557,7 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
     if (!profile) {
       // Número/LID totalmente desconhecido — silêncio total (evita spam em bots/scanners).
       // Fluxo correto pra novos clientes:
-      //   1. Cadastra phone no MeuPerfil → backend envia código MAYA-XXXXXX via Evolution
+      //   1. Cadastra phone no MeuPerfil → backend envia código JARVIS-XXXXXX via Evolution
       //   2. User responde com o código → esta função captura no bloco linkMatch acima
       //   3. LID vinculado → futuras mensagens resolvem por whatsapp_lid direto
       log.push("unknown_number");
@@ -5571,7 +5571,7 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
     if (profile.account_status === "suspended") {
       await sendText(
         sendPhone || replyTo,
-        "🚫 *Acesso suspenso*\n\nSua conta na Minha Maya está suspensa devido a um estorno ou reembolso confirmado.\n\nSe acredita que isso é um engano, ou deseja reativar sua assinatura, acesse:\n👉 *minhamaya.com*"
+        "🚫 *Acesso suspenso*\n\nSua conta no Hey Jarvis está suspensa devido a um estorno ou reembolso confirmado.\n\nSe acredita que isso é um engano, ou deseja reativar sua assinatura, acesse:\n👉 *heyjarvis.com.br*"
       );
       log.push("account_suspended");
       return log;
@@ -5580,7 +5580,7 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
     if (profile.account_status === "pending") {
       await sendText(
         sendPhone || replyTo,
-        "⏳ *Sua conta ainda não tem plano ativo*\n\nPara usar a Maya, assine um plano no app:\n👉 *minhamaya.com*\n\nSe já assinou ou um administrador liberou seu acesso, a Maya vai começar a responder em instantes."
+        "⏳ *Sua conta ainda não tem plano ativo*\n\nPara usar o Jarvis, assine um plano no app:\n👉 *heyjarvis.com.br*\n\nSe já assinou ou um administrador liberou seu acesso, o Jarvis vai começar a responder em instantes."
       );
       log.push("account_pending");
       return log;
@@ -5608,7 +5608,7 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
 
         await sendText(
           sendPhone || replyTo,
-          "⏰ *Sua assinatura expirou*\n\nSeu período de acesso à Minha Maya chegou ao fim.\n\nRenove sua assinatura para voltar a usar a Maya normalmente:\n👉 *minhamaya.com*"
+          "⏰ *Sua assinatura expirou*\n\nSeu período de acesso ao Hey Jarvis chegou ao fim.\n\nRenove sua assinatura para voltar a usar o Jarvis normalmente:\n👉 *heyjarvis.com.br*"
         );
         log.push("access_expired");
         return log;
@@ -5630,7 +5630,7 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
     }
 
     // 3c. Primeira mensagem após vinculação via pending_link → welcome message
-    // (não processa o "oi" como comando normal pra não confundir o Maya)
+    // (não processa o "oi" como comando normal pra não confundir o Jarvis)
     if (justLinkedViaPending) {
       const userName = (profile as any).display_name?.split(/\s+/)[0] || "";
       const hello = userName ? `Oi ${userName}! 👋` : "Oi! 👋";
@@ -5649,7 +5649,7 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
       return log;
     }
 
-    const agentName = config?.agent_name ?? "Maya";
+    const agentName = config?.agent_name ?? "Jarvis";
     const tone = config?.tone ?? "profissional";
     const language = (config?.language as string) || "pt-BR";
     const userNickname = (config?.user_nickname as string) || null;
@@ -6132,20 +6132,20 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
 
     } else if (intent === "reminder_delegate") {
       // Resposta à pergunta "Quem envia?" disparada pelo send-reminder quando o
-      // lembrete continha um "enviar pro X..." — usuário escolhe Maya ou ele mesmo.
+      // lembrete continha um "enviar pro X..." — usuário escolhe Jarvis ou ele mesmo.
       const ctx = (session?.pending_context ?? {}) as Record<string, unknown>;
       const contactText = (ctx.contact_text as string) ?? "";
       const msgLow = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-      const mayaSends =
-        text === "BUTTON:DELEGATE_MAYA" ||
-        /^(1|maya|pode|voce envia|pode enviar|maya envia|pode ser|manda voce|envia voce|sim)\b/i.test(msgLow);
+      const jarvisSends =
+        text === "BUTTON:DELEGATE_JARVIS" ||
+        /^(1|jarvis|pode|voce envia|pode enviar|jarvis envia|pode ser|manda voce|envia voce|sim)\b/i.test(msgLow);
       const meSends =
         text === "BUTTON:DELEGATE_ME" ||
         /^(2|eu|eu mesmo|eu envio|vou eu|nao|deixa que eu|eu mando)\b/i.test(msgLow);
 
-      if (mayaSends && contactText) {
-        // Maya executa o envio — reutiliza handleSendToContact com o texto original do lembrete
+      if (jarvisSends && contactText) {
+        // Jarvis executa o envio — reutiliza handleSendToContact com o texto original do lembrete
         responseText = await handleSendToContact(
           profile.id, sendPhone || replyTo, contactText, userTz, agentName, userNickname, pushName
         );
@@ -6155,7 +6155,7 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
         // Não reconheceu — repete a pergunta
         const opts =
           `Quem envia essa mensagem?\n\n` +
-          `*1.* 🤖 Maya envia\n` +
+          `*1.* 🤖 Jarvis envia\n` +
           `*2.* ✉️ Eu mesmo envio`;
         responseText = opts;
       }
@@ -6170,7 +6170,7 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
         .eq("user_id", profile.id)
         .order("name", { ascending: true });
       if (!allContacts || allContacts.length === 0) {
-        responseText = "Você ainda não tem contatos salvos na Maya. 📇\n\nCompartilhe um contato comigo ou diga _\"Salva o contato [Nome]: [número]\"_";
+        responseText = "Você ainda não tem contatos salvos no Jarvis. 📇\n\nCompartilhe um contato comigo ou diga _\"Salva o contato [Nome]: [número]\"_";
       } else {
         // Formata phone pra exibição se disponível (ex: +55 11 9xxxx-xxxx)
         const lines = allContacts.map((c: any) => {

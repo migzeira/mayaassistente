@@ -8,7 +8,7 @@ export default function TermosDeUso() {
       <header className="sticky top-0 z-50 bg-[#03030a]/90 backdrop-blur-2xl border-b border-white/[0.06]">
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
           <Link to="/">
-            <img src={logoEscrita} alt="Minha Maya" className="h-7 w-auto" />
+            <img src={logoEscrita} alt="Hey Jarvis" className="h-7 w-auto" />
           </Link>
           <Link to="/" className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors">
             <ArrowLeft className="w-4 h-4" /> Voltar
@@ -23,12 +23,12 @@ export default function TermosDeUso() {
         <div className="prose prose-invert prose-sm max-w-none space-y-6 text-gray-300 leading-relaxed">
           <section>
             <h2 className="text-lg font-bold text-white">1. Aceitação dos Termos</h2>
-            <p>Ao acessar ou usar os serviços da Minha Maya ("Serviço"), você concorda em cumprir estes Termos de Uso. Se não concordar, não use o Serviço. O uso continuado após alterações constitui aceitação dos termos atualizados.</p>
+            <p>Ao acessar ou usar os serviços da Hey Jarvis ("Serviço"), você concorda em cumprir estes Termos de Uso. Se não concordar, não use o Serviço. O uso continuado após alterações constitui aceitação dos termos atualizados.</p>
           </section>
 
           <section>
             <h2 className="text-lg font-bold text-white">2. Descrição do Serviço</h2>
-            <p>A Minha Maya é um assistente pessoal baseado em inteligência artificial que funciona via WhatsApp. O Serviço permite gerenciar finanças, agenda, lembretes, anotações e integrações com ferramentas como Google Calendar, Google Sheets e Notion.</p>
+            <p>A Hey Jarvis é um assistente pessoal baseado em inteligência artificial que funciona via WhatsApp. O Serviço permite gerenciar finanças, agenda, lembretes, anotações e integrações com ferramentas como Google Calendar, Google Sheets e Notion.</p>
           </section>
 
           <section>
@@ -60,7 +60,7 @@ export default function TermosDeUso() {
 
           <section>
             <h2 className="text-lg font-bold text-white">7. Limitação de Responsabilidade</h2>
-            <p>O Serviço é fornecido "como está". A Minha Maya não garante disponibilidade ininterrupta e não se responsabiliza por perdas decorrentes de falhas técnicas, erros de IA, indisponibilidade temporária ou uso inadequado do Serviço.</p>
+            <p>O Serviço é fornecido "como está". A Hey Jarvis não garante disponibilidade ininterrupta e não se responsabiliza por perdas decorrentes de falhas técnicas, erros de IA, indisponibilidade temporária ou uso inadequado do Serviço.</p>
           </section>
 
           <section>
@@ -85,7 +85,7 @@ export default function TermosDeUso() {
 
           <section>
             <h2 className="text-lg font-bold text-white">12. Contato</h2>
-            <p>Em caso de dúvidas sobre estes Termos, entre em contato pelo email: <a href="mailto:suporte@minhamaya.com.br" className="text-violet-400 hover:text-violet-300">suporte@minhamaya.com.br</a></p>
+            <p>Em caso de dúvidas sobre estes Termos, entre em contato pelo email: <a href="mailto:suporte@heyjarvis.com.br" className="text-violet-400 hover:text-violet-300">suporte@heyjarvis.com.br</a></p>
           </section>
         </div>
       </main>

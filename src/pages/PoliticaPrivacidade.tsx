@@ -8,7 +8,7 @@ export default function PoliticaPrivacidade() {
       <header className="sticky top-0 z-50 bg-[#03030a]/90 backdrop-blur-2xl border-b border-white/[0.06]">
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
           <Link to="/">
-            <img src={logoEscrita} alt="Minha Maya" className="h-7 w-auto" />
+            <img src={logoEscrita} alt="Hey Jarvis" className="h-7 w-auto" />
           </Link>
           <Link to="/" className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors">
             <ArrowLeft className="w-4 h-4" /> Voltar
@@ -79,7 +79,7 @@ export default function PoliticaPrivacidade() {
               <li>Solicitar portabilidade dos dados</li>
               <li>Obter informações sobre com quem seus dados foram compartilhados</li>
             </ul>
-            <p>Para exercer seus direitos, entre em contato pelo email: <a href="mailto:suporte@minhamaya.com.br" className="text-violet-400 hover:text-violet-300">suporte@minhamaya.com.br</a></p>
+            <p>Para exercer seus direitos, entre em contato pelo email: <a href="mailto:suporte@heyjarvis.com.br" className="text-violet-400 hover:text-violet-300">suporte@heyjarvis.com.br</a></p>
           </section>
 
           <section>
@@ -105,7 +105,7 @@ export default function PoliticaPrivacidade() {
           <section>
             <h2 className="text-lg font-bold text-white">11. Contato</h2>
             <p>Para dúvidas sobre esta Política de Privacidade ou sobre o tratamento dos seus dados, entre em contato:</p>
-            <p>Email: <a href="mailto:suporte@minhamaya.com.br" className="text-violet-400 hover:text-violet-300">suporte@minhamaya.com.br</a></p>
+            <p>Email: <a href="mailto:suporte@heyjarvis.com.br" className="text-violet-400 hover:text-violet-300">suporte@heyjarvis.com.br</a></p>
             <p>Responsável: MayaHub · <a href="https://mayahub.ai" className="text-violet-400 hover:text-violet-300" target="_blank" rel="noreferrer">mayahub.ai</a></p>
           </section>
         </div>

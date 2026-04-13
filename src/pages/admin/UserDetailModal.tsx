@@ -291,8 +291,8 @@ export default function UserDetailModal({ userId, userName, open, onClose, onPro
 
   const handleSuspend = async () => {
     if (actionInProgress) return;
-    // Confirmação obrigatória em ação destrutiva — cliente para de receber respostas da Maya
-    if (!window.confirm(`Suspender a conta de ${userName}? A Maya vai parar de responder no WhatsApp dele.`)) return;
+    // Confirmação obrigatória em ação destrutiva — cliente para de receber respostas do Jarvis
+    if (!window.confirm(`Suspender a conta de ${userName}? O Jarvis vai parar de responder no WhatsApp dele.`)) return;
     setActionInProgress("suspend");
     try {
       const { error } = await (supabase.from("profiles").update({

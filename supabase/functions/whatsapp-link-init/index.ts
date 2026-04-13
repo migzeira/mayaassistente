@@ -3,14 +3,14 @@
 // Fluxo pro cliente:
 //  1. Cliente cadastra phone no MeuPerfil (ou clica "Reenviar mensagem")
 //  2. Este endpoint envia uma mensagem amigável via Evolution pro phone:
-//     "Oi [Nome]! Responda qualquer coisa aqui pra ativar sua Maya"
+//     "Oi [Nome]! Responda qualquer coisa aqui pra ativar seu Jarvis"
 //  3. Salva um pending_whatsapp_link (janela de 15 min) pra o webhook
 //     reconhecer quando o cliente responder
 //  4. Cliente responde "oi" (ou qualquer coisa) no WhatsApp
 //  5. Webhook procura pending_link ativo, vincula o LID ao profile
 //  6. Pronto — todas as próximas mensagens funcionam direto
 //
-// Gera tambem um link_code MAYA-XXXXXX como safety net (fallback caso
+// Gera tambem um link_code JARVIS-XXXXXX como safety net (fallback caso
 // haja múltiplos pending_links ativos no mesmo momento).
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -114,7 +114,7 @@ serve(async (req) => {
     const greeting = firstName ? `Oi ${firstName}! 👋` : "Oi! 👋";
     const welcomeMsg =
       `${greeting}\n\n` +
-      `Sou a *Maya*, sua assistente pessoal. Tudo pronto! ✨\n\n` +
+      `Sou o *Jarvis*, seu assistente pessoal. Tudo pronto! ✨\n\n` +
       `A partir de agora você pode me mandar mensagens aqui pra:\n` +
       `💰 Registrar gastos — _gastei 50 reais de almoço_\n` +
       `📅 Marcar compromissos — _reunião amanhã às 14h_\n` +
@@ -170,7 +170,7 @@ serve(async (req) => {
   const greeting = firstName ? `Oi ${firstName}! 👋` : "Oi! 👋";
   const msg =
     `${greeting}\n\n` +
-    `Sou a *Maya*, sua assistente pessoal.\n\n` +
+    `Sou o *Jarvis*, seu assistente pessoal.\n\n` +
     `Pra começar é só me mandar qualquer mensagem aqui — um *"oi"* já tá ótimo. 😊\n\n` +
     `Depois disso você vai poder:\n` +
     `💰 Registrar gastos\n` +

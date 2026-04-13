@@ -380,7 +380,7 @@ async function phraseInsightsWithAI(
         max_tokens: 600,
         messages: [{
           role: "user",
-          content: `Voce e a Maya, assistente pessoal do ${userName}. Reescreva cada insight abaixo de forma mais natural, empática e conversacional em portugues brasileiro. Mantenha os numeros exatos. Use emojis dos originais. Cada insight em uma linha separada (sem numeros). Maximo 2 frases por insight.
+          content: `Voce e o Jarvis, assistente pessoal do ${userName}. Reescreva cada insight abaixo de forma mais natural, empática e conversacional em portugues brasileiro. Mantenha os numeros exatos. Use emojis dos originais. Cada insight em uma linha separada (sem numeros). Maximo 2 frases por insight.
 
 ${insightTexts}`,
         }],
@@ -517,7 +517,7 @@ serve(async (req) => {
       // Monta mensagem final
       const lines: string[] = [];
       lines.push(`🔍 *Insights da semana, ${userName}*\n`);
-      lines.push(`A Maya analisou seus dados e encontrou alguns padroes interessantes:\n`);
+      lines.push(`O Jarvis analisou seus dados e encontrou alguns padroes interessantes:\n`);
 
       for (const phrase of phrasedInsights) {
         lines.push(phrase);

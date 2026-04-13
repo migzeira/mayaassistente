@@ -389,7 +389,7 @@ export default function AdminPanel() {
             <ChevronLeft className="h-4 w-4 mr-1" /> Dashboard
           </Button>
           <Shield className="h-6 w-6 text-purple-400" />
-          <h1 className="text-xl font-bold">Admin Master — Minha Maya</h1>
+          <h1 className="text-xl font-bold">Admin Master — Hey Jarvis</h1>
           <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30">{stats.totalUsers} usuários</Badge>
         </div>
         <div className="flex items-center gap-3">

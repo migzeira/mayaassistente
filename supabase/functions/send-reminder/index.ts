@@ -202,7 +202,7 @@ serve(async (_req) => {
   for (const reminder of reminders) {
     try {
       // ─── Delegação de envio: quando o lembrete é "enviar pro X..." ────────
-      // Pergunta ao usuário se a Maya deve enviar ou se ele mesmo envia.
+      // Pergunta ao usuário se o Jarvis deve enviar ou se ele mesmo envia.
       const isDelegateReminder =
         reminder.source !== "send_to_contact" && // evita loop
         reminderHasSendToContact(reminder.title ?? "");
@@ -217,7 +217,7 @@ serve(async (_req) => {
           `⏰ Lembrete: ${reminder.title}`,
           `Quem envia essa mensagem?`,
           [
-            { id: "DELEGATE_MAYA", text: "🤖 Maya envia" },
+            { id: "DELEGATE_JARVIS", text: "🤖 Jarvis envia" },
             { id: "DELEGATE_ME",   text: "✉️ Eu mesmo envio" },
           ]
         );

@@ -52,7 +52,7 @@ export default function MeuPlano() {
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <Zap className="h-5 w-5 text-primary" />
-                <h2 className="text-xl font-bold">Maya</h2>
+                <h2 className="text-xl font-bold">Jarvis</h2>
                 {isAnnual
                   ? <Badge className="bg-primary/20 text-primary border-primary/30">Anual</Badge>
                   : <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30">Mensal</Badge>
@@ -87,7 +87,7 @@ export default function MeuPlano() {
 
           {isActive && !isCancelling && (
             <p className="mt-4 text-sm text-green-300 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
-              ✅ Tudo ativo! A Maya está disponível 24/7 para você no WhatsApp.
+              ✅ Tudo ativo! O Jarvis está disponível 24/7 para você no WhatsApp.
             </p>
           )}
         </CardContent>

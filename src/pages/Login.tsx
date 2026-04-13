@@ -27,7 +27,7 @@ export default function Login() {
   }, [navigate]);
 
   useEffect(() => {
-    const saved = localStorage.getItem("maya_remember_email");
+    const saved = localStorage.getItem("jarvis_remember_email");
     if (saved) {
       setEmail(saved);
       setRememberMe(true);
@@ -38,9 +38,9 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     if (rememberMe) {
-      localStorage.setItem("maya_remember_email", email);
+      localStorage.setItem("jarvis_remember_email", email);
     } else {
-      localStorage.removeItem("maya_remember_email");
+      localStorage.removeItem("jarvis_remember_email");
     }
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
@@ -61,7 +61,7 @@ export default function Login() {
             </Button>
           </div>
           <div className="flex items-center justify-center mb-4">
-            <img src={logoEscrita} alt="Minha Maya" className="h-8 w-auto object-contain" />
+            <img src={logoEscrita} alt="Hey Jarvis" className="h-8 w-auto object-contain" />
           </div>
           <CardTitle className="text-xl">Entrar na sua conta</CardTitle>
           <CardDescription>Digite seu email e senha para acessar</CardDescription>

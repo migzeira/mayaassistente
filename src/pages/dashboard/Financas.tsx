@@ -1290,7 +1290,7 @@ export default function Financas() {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-semibold">Metas mensais por categoria</h3>
-              <p className="text-sm text-muted-foreground">A Maya avisa no WhatsApp quando você estiver perto do limite.</p>
+              <p className="text-sm text-muted-foreground">O Jarvis avisa no WhatsApp quando você estiver perto do limite.</p>
             </div>
             <Dialog open={budgetDialog} onOpenChange={v => { setBudgetDialog(v); if (!v) setEditingBudget(null); }}>
               <DialogTrigger asChild>
@@ -1324,7 +1324,7 @@ export default function Financas() {
                     <Label>Alertar quando atingir (%)</Label>
                     <Input type="number" min="50" max="100" value={budgetForm.alert_at_percent}
                       onChange={e => setBudgetForm(f => ({ ...f, alert_at_percent: e.target.value }))} />
-                    <p className="text-xs text-muted-foreground">A Maya avisa no WhatsApp ao atingir esse percentual.</p>
+                    <p className="text-xs text-muted-foreground">O Jarvis avisa no WhatsApp ao atingir esse percentual.</p>
                   </div>
                   <Button type="submit" className="w-full">{editingBudget ? "Atualizar" : "Criar"} meta</Button>
                 </form>

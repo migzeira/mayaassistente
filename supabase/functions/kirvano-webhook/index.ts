@@ -2,7 +2,7 @@
  * kirvano-webhook — Sistema completo de gestão de assinaturas
  *
  * Fluxos:
- *  COMPRA APROVADA (novo usuário)  → registra pendência; quando ele criar conta na Maya é ativado automaticamente
+ *  COMPRA APROVADA (novo usuário)  → registra pendência; quando ele criar conta no Jarvis é ativado automaticamente
  *  COMPRA APROVADA (conta existente) → ativa a conta e define o plano
  *  ASSINATURA RENOVADA            → mantém conta ativa, renova plano
  *  ASSINATURA CANCELADA           → mantém acesso até fim do ciclo (next_charge_date ou +30d)
@@ -243,7 +243,7 @@ async function handleCancel(
   // Notifica no WhatsApp
   const until = new Date(accessUntil).toLocaleDateString("pt-BR", { timeZone: userTz });
   await notifyUser(userId,
-    `⚠️ *Assinatura cancelada*\n\nSua assinatura da Maya foi cancelada.\n\nSeu acesso continua ativo até *${until}*. Após essa data o assistente será desativado automaticamente.\n\nSe quiser continuar usando, basta renovar sua assinatura no app.`
+    `⚠️ *Assinatura cancelada*\n\nSua assinatura do Jarvis foi cancelada.\n\nSeu acesso continua ativo até *${until}*. Após essa data o assistente será desativado automaticamente.\n\nSe quiser continuar usando, basta renovar sua assinatura no app.`
   );
 
   console.log(`[kirvano] 🔔 Cancelled for user ${userId}, access until ${accessUntil}`);
@@ -263,7 +263,7 @@ async function handleRevoke(userId: string): Promise<void> {
 
   // Notifica no WhatsApp
   await notifyUser(userId,
-    `🚫 *Acesso suspenso*\n\nSeu acesso à Maya foi suspenso devido a um reembolso ou estorno confirmado.\n\nCaso acredite que isso seja um erro, entre em contato com nosso suporte.`
+    `🚫 *Acesso suspenso*\n\nSeu acesso ao Jarvis foi suspenso devido a um reembolso ou estorno confirmado.\n\nCaso acredite que isso seja um erro, entre em contato com nosso suporte.`
   );
 
   console.log(`[kirvano] 🚫 Revoked access for user ${userId}`);
@@ -272,7 +272,7 @@ async function handleRevoke(userId: string): Promise<void> {
 /** Pagamento atrasado */
 async function handleOverdue(userId: string): Promise<void> {
   await notifyUser(userId,
-    `⏰ *Pagamento atrasado*\n\nIdentificamos um pagamento em atraso na sua assinatura da Maya.\n\nRegularize para evitar a suspensão do seu acesso. Qualquer dúvida, acesse o app.`
+    `⏰ *Pagamento atrasado*\n\nIdentificamos um pagamento em atraso na sua assinatura do Jarvis.\n\nRegularize para evitar a suspensão do seu acesso. Qualquer dúvida, acesse o app.`
   );
   console.log(`[kirvano] ⚠️ Overdue for user ${userId}`);
 }
@@ -313,7 +313,7 @@ async function processEvent(kData: KirvanoData): Promise<void> {
   await logEvent(kData, canonical, userId);
 
   if (!userId) {
-    // Usuário ainda não tem conta na Maya.
+    // Usuário ainda não tem conta no Jarvis.
     // O evento fica gravado em kirvano_events. Quando ele criar conta com este
     // email, o trigger handle_new_user vai buscar este evento (status='activate',
     // matched_user_id IS NULL) e auto-ativar a conta com o plano correto.

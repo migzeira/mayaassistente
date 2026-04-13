@@ -137,7 +137,7 @@ serve(async (req) => {
 
     const calData = await calRes.json();
     const googleEvents = (calData.items || []).map((item: any) => {
-      // Converte formato Google Calendar para formato da agenda Maya
+      // Converte formato Google Calendar para formato da agenda Jarvis
       const isAllDay = !!item.start?.date;
       const startDate = isAllDay
         ? item.start.date

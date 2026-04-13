@@ -62,7 +62,7 @@ const QUICK_ACTIONS = [
   {
     icon: Settings,
     label: "Configurar Agente",
-    desc: "Personalizar a Maya",
+    desc: "Personalizar o Jarvis",
     to: "/dashboard/agente",
     color: "text-violet-400",
     bg: "bg-violet-500/10",
@@ -118,10 +118,10 @@ export default function DashboardHome() {
 
   // Onboarding widget dismissal (persist em localStorage)
   const [onboardingDismissed, setOnboardingDismissed] = useState<boolean>(
-    () => typeof window !== "undefined" && !!localStorage.getItem("maya_onboarding_dismissed_v1")
+    () => typeof window !== "undefined" && !!localStorage.getItem("jarvis_onboarding_dismissed_v1")
   );
   const dismissOnboarding = () => {
-    localStorage.setItem("maya_onboarding_dismissed_v1", "1");
+    localStorage.setItem("jarvis_onboarding_dismissed_v1", "1");
     setOnboardingDismissed(true);
   };
 
@@ -141,7 +141,7 @@ export default function DashboardHome() {
     if (typeof window === "undefined") return;
     const au = profile?.access_until;
     if (!au) { setAdminBannerDismissed(false); return; }
-    const key = `maya_admin_banner_dismissed_v1:${new Date(au).toISOString()}`;
+    const key = `jarvis_admin_banner_dismissed_v1:${new Date(au).toISOString()}`;
     setAdminBannerDismissed(!!localStorage.getItem(key));
   }, [profile?.access_until]);
 
@@ -299,7 +299,7 @@ export default function DashboardHome() {
   // para que um novo período/renovação reapresente o banner.
   // NOTA: o useState/useEffect deste banner está declarado no TOPO do componente
   // (antes do early return do loading) pra não violar Rules of Hooks.
-  const adminBannerKey = accessUntil ? `maya_admin_banner_dismissed_v1:${accessUntil.toISOString()}` : null;
+  const adminBannerKey = accessUntil ? `jarvis_admin_banner_dismissed_v1:${accessUntil.toISOString()}` : null;
   const dismissAdminBanner = () => {
     if (adminBannerKey) {
       localStorage.setItem(adminBannerKey, "1");
@@ -318,7 +318,7 @@ export default function DashboardHome() {
             <p className="text-sm font-semibold">Acesso suspenso</p>
             <p className="text-xs text-red-400 mt-0.5">Sua conta foi suspensa por estorno ou reembolso. Renove para reativar o assistente.</p>
           </div>
-          <a href="https://minhamaya.com" target="_blank" rel="noopener noreferrer" className="shrink-0 mr-2">
+          <a href="https://heyjarvis.com.br" target="_blank" rel="noopener noreferrer" className="shrink-0 mr-2">
             <button className="text-xs font-medium bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors">
               <ExternalLink className="h-3.5 w-3.5" /> Renovar
             </button>
@@ -338,9 +338,9 @@ export default function DashboardHome() {
           <Lock className="h-5 w-5 shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold">Assine um plano para começar</p>
-            <p className="text-xs text-violet-300/80 mt-0.5">Sua conta está sem plano ativo. Assine para cadastrar seu WhatsApp e usar a Maya.</p>
+            <p className="text-xs text-violet-300/80 mt-0.5">Sua conta está sem plano ativo. Assine para cadastrar seu WhatsApp e usar o Jarvis.</p>
           </div>
-          <a href="https://minhamaya.com" target="_blank" rel="noopener noreferrer" className="shrink-0 mr-2">
+          <a href="https://heyjarvis.com.br" target="_blank" rel="noopener noreferrer" className="shrink-0 mr-2">
             <button className="text-xs font-medium bg-violet-500/20 hover:bg-violet-500/30 border border-violet-500/40 text-violet-100 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors">
               <ExternalLink className="h-3.5 w-3.5" /> Ver planos
             </button>
@@ -389,7 +389,7 @@ export default function DashboardHome() {
               {accessUntil!.toLocaleDateString("pt-BR")}. Após essa data o assistente será desativado.
             </p>
           </div>
-          <a href="https://minhamaya.com" target="_blank" rel="noopener noreferrer" className="shrink-0 mr-2">
+          <a href="https://heyjarvis.com.br" target="_blank" rel="noopener noreferrer" className="shrink-0 mr-2">
             <button className="text-xs font-medium bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500/40 text-yellow-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors">
               <ExternalLink className="h-3.5 w-3.5" /> Renovar
             </button>
@@ -409,9 +409,9 @@ export default function DashboardHome() {
           <XCircle className="h-5 w-5 shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold">Assinatura expirada</p>
-            <p className="text-xs text-red-400 mt-0.5">Seu período de acesso chegou ao fim. Renove para voltar a usar a Maya.</p>
+            <p className="text-xs text-red-400 mt-0.5">Seu período de acesso chegou ao fim. Renove para voltar a usar o Jarvis.</p>
           </div>
-          <a href="https://minhamaya.com" target="_blank" rel="noopener noreferrer" className="shrink-0 mr-2">
+          <a href="https://heyjarvis.com.br" target="_blank" rel="noopener noreferrer" className="shrink-0 mr-2">
             <button className="text-xs font-medium bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors">
               <ExternalLink className="h-3.5 w-3.5" /> Renovar
             </button>
@@ -433,9 +433,9 @@ export default function DashboardHome() {
         <div className="flex items-center gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200">
           <AlertTriangle className="h-5 w-5 shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold">Ative o agente pra conversar com a Maya</p>
+            <p className="text-sm font-semibold">Ative o agente pra conversar com o Jarvis</p>
             <p className="text-xs text-amber-300/80 mt-0.5">
-              Seu número está cadastrado mas o agente está desativado. Ative o toggle abaixo pra que a Maya comece a responder no seu WhatsApp.
+              Seu número está cadastrado mas o agente está desativado. Ative o toggle abaixo pra que o Jarvis comece a responder no seu WhatsApp.
             </p>
           </div>
           <button
@@ -460,7 +460,7 @@ export default function DashboardHome() {
           </button>
           <CardContent className="pt-5 pb-5">
             <h3 className="text-base font-bold mb-3 flex items-center gap-2 pr-8">
-              🚀 Configure sua Maya em 3 passos
+              🚀 Configure seu Jarvis em 3 passos
             </h3>
             <div className="space-y-3">
               {[
@@ -477,9 +477,9 @@ export default function DashboardHome() {
                 {
                   num: 2,
                   done: profile?.messages_used > 0,
-                  title: 'Mande "oi" no WhatsApp da Maya',
+                  title: 'Mande "oi" no WhatsApp do Jarvis',
                   hint: (profile?.messages_used === 0 && phoneSet)
-                    ? "Envie uma mensagem para o número da Maya e ela vai te responder" : null,
+                    ? "Envie uma mensagem para o número do Jarvis e ele vai te responder" : null,
                 },
                 {
                   num: 3,
@@ -505,7 +505,7 @@ export default function DashboardHome() {
         </Card>
       )}
 
-      {/* ── Mobile header portal: "Como usar a Maya" button ── */}
+      {/* ── Mobile header portal: "Como usar o Jarvis" button ── */}
       {typeof document !== "undefined" && document.getElementById("dashboard-header-actions") &&
         createPortal(
           <Button
@@ -515,7 +515,7 @@ export default function DashboardHome() {
             className="sm:hidden gap-1.5 border-violet-500/40 text-violet-400 hover:bg-violet-500/10 hover:text-violet-300 text-xs h-8"
           >
             <BookOpen className="h-3.5 w-3.5" />
-            Como usar a Maya
+            Como usar o Jarvis
           </Button>,
           document.getElementById("dashboard-header-actions")!
         )
@@ -546,7 +546,7 @@ export default function DashboardHome() {
             ) : (
               <Link to="/dashboard/perfil" className="flex items-center gap-1.5 text-primary hover:text-primary/80 transition-colors group">
                 <Smartphone className="h-3 w-3 shrink-0" />
-                <span className="text-xs font-medium group-hover:underline">Clique aqui para ativar a Maya</span>
+                <span className="text-xs font-medium group-hover:underline">Clique aqui para ativar o Jarvis</span>
               </Link>
             )}
 
@@ -561,7 +561,7 @@ export default function DashboardHome() {
           </div>
         </div>
 
-        {/* Desktop: Como usar a Maya button */}
+        {/* Desktop: Como usar o Jarvis button */}
         <div className="hidden sm:flex items-center gap-2">
           <Button
             variant="outline"
@@ -570,7 +570,7 @@ export default function DashboardHome() {
             className="gap-2 border-violet-500/40 text-violet-400 hover:bg-violet-500/10 hover:text-violet-300"
           >
             <BookOpen className="h-4 w-4" />
-            Como usar a Maya
+            Como usar o Jarvis
           </Button>
         </div>
       </div>
@@ -663,7 +663,7 @@ export default function DashboardHome() {
               <div className="flex flex-col items-center justify-center py-10 text-center gap-2">
                 <BarChart3 className="h-8 w-8 text-muted-foreground/40" />
                 <p className="text-muted-foreground text-sm">Nenhum gasto registrado nos últimos 7 dias.</p>
-                <p className="text-xs text-muted-foreground">Diga para a Maya: <span className="font-mono text-violet-400">"Gastei 50 reais no mercado"</span></p>
+                <p className="text-xs text-muted-foreground">Diga para o Jarvis: <span className="font-mono text-violet-400">"Gastei 50 reais no mercado"</span></p>
               </div>
             )}
           </CardContent>
@@ -702,7 +702,7 @@ export default function DashboardHome() {
               <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
                 <CalendarDays className="h-7 w-7 text-muted-foreground/40" />
                 <p className="text-muted-foreground text-sm">Agenda livre por aqui.</p>
-                <p className="text-xs text-muted-foreground">Diga à Maya: <span className="font-mono text-violet-400">"Reunião sexta às 10h"</span></p>
+                <p className="text-xs text-muted-foreground">Diga ao Jarvis: <span className="font-mono text-violet-400">"Reunião sexta às 10h"</span></p>
               </div>
             )}
           </CardContent>
@@ -809,7 +809,7 @@ export default function DashboardHome() {
               <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
                 <MessageSquare className="h-7 w-7 text-muted-foreground/40" />
                 <p className="text-muted-foreground text-sm">Nenhuma atividade ainda.</p>
-                <p className="text-xs text-muted-foreground">Comece conversando com a Maya no WhatsApp!</p>
+                <p className="text-xs text-muted-foreground">Comece conversando com o Jarvis no WhatsApp!</p>
               </div>
             )}
           </CardContent>

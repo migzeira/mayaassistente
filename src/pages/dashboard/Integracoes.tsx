@@ -32,12 +32,12 @@ const instructions: Record<string, string[]> = {
   google: [
     "Clique em Conectar Google",
     "Faça login com sua conta Google",
-    "Autorize a Minha Maya a acessar Calendar e Sheets",
+    "Autorize a Hey Jarvis a acessar Calendar e Sheets",
     "Para Sheets: copie o ID da planilha (entre /d/ e /edit na URL)",
   ],
   notion: [
     "Clique em Conectar Notion",
-    "Selecione seu workspace e autorize a Minha Maya",
+    "Selecione seu workspace e autorize a Hey Jarvis",
     "Cole o ID do database (parte após o último / antes do ? na URL)",
   ],
 };

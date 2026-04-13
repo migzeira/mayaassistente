@@ -13,8 +13,8 @@ const supabaseAdmin = createClient(
 );
 
 const ALLOWED_ORIGINS = [
-  "https://minhamaya.com.br",
-  "https://www.minhamaya.com.br",
+  "https://heyjarvis.com.br",
+  "https://www.heyjarvis.com.br",
   "http://localhost:5173",
   "http://localhost:3000",
 ];

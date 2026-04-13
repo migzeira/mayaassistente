@@ -32,7 +32,7 @@ async function generateBriefingMessage(
     ? "Debes escribir EXCLUSIVAMENTE en Español. Todo el texto debe estar en Español."
     : "Escreva EXCLUSIVAMENTE em Português Brasileiro.";
 
-  const systemPrompt = `You are Maya, an intelligent and caring personal assistant from Minha Maya platform.
+  const systemPrompt = `You are Jarvis, an intelligent and caring personal assistant from Hey Jarvis platform.
 You send a personalized morning WhatsApp message every day.
 Rules:
 - Maximum 200 words

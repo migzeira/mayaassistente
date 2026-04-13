@@ -100,7 +100,7 @@ export default function ConfigAgente() {
             <div className="space-y-2">
               <Label>Nome do agente</Label>
               <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-input bg-muted/50 text-sm text-muted-foreground select-none">
-                <span className="font-semibold text-foreground">Maya</span>
+                <span className="font-semibold text-foreground">Jarvis</span>
                 <span className="text-xs">— nome padrão da assistente</span>
               </div>
             </div>
@@ -121,7 +121,7 @@ export default function ConfigAgente() {
                   <SelectItem value="tecnico">🔧 Técnico — preciso, focado em dados e números</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Define como a Maya se comunica com você no WhatsApp.</p>
+              <p className="text-xs text-muted-foreground">Define como o Jarvis se comunica com você no WhatsApp.</p>
             </div>
             <div className="space-y-2">
               <Label>Idioma</Label>
@@ -142,10 +142,10 @@ export default function ConfigAgente() {
         <CardHeader><CardTitle className="text-base">Módulos ativos</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           {[
-            { key: "module_finance", label: "💰 Financeiro", desc: "Registrar gastos e receitas pelo WhatsApp — se desativado, a Maya recusa qualquer pedido financeiro" },
-            { key: "module_agenda", label: "📅 Agenda", desc: "Criar, consultar e editar compromissos — se desativado, a Maya recusa pedidos de agenda e followups de eventos" },
-            { key: "module_notes", label: "📝 Anotações e Lembretes", desc: "Salvar notas e criar lembretes WhatsApp — se desativado, a Maya recusa anotações e lembretes" },
-            { key: "module_chat", label: "💬 Conversa livre", desc: "Respostas de IA para perguntas gerais — se desativado, a Maya só responde com os módulos ativos" },
+            { key: "module_finance", label: "💰 Financeiro", desc: "Registrar gastos e receitas pelo WhatsApp — se desativado, o Jarvis recusa qualquer pedido financeiro" },
+            { key: "module_agenda", label: "📅 Agenda", desc: "Criar, consultar e editar compromissos — se desativado, o Jarvis recusa pedidos de agenda e followups de eventos" },
+            { key: "module_notes", label: "📝 Anotações e Lembretes", desc: "Salvar notas e criar lembretes WhatsApp — se desativado, o Jarvis recusa anotações e lembretes" },
+            { key: "module_chat", label: "💬 Conversa livre", desc: "Respostas de IA para perguntas gerais — se desativado, o Jarvis só responde com os módulos ativos" },
           ].map(m => (
             <div key={m.key} className="flex items-center justify-between">
               <div>
@@ -190,7 +190,7 @@ export default function ConfigAgente() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium">🔍 Insights proativos</p>
-              <p className="text-xs text-muted-foreground">Toda segunda a Maya analisa seus dados e envia padrões detectados — gastos crescentes, dias com mais cancelamentos, hábitos em risco</p>
+              <p className="text-xs text-muted-foreground">Toda segunda o Jarvis analisa seus dados e envia padrões detectados — gastos crescentes, dias com mais cancelamentos, hábitos em risco</p>
             </div>
             <Switch checked={!!config.proactive_insights_enabled} onCheckedChange={v => setConfig({...config, proactive_insights_enabled: v})} />
           </div>

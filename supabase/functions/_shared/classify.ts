@@ -164,9 +164,9 @@ export function classifyIntent(msg: string): Intent {
   )
     return "schedule_meeting";
 
-  // Listar contatos salvos na Maya
+  // Listar contatos salvos no Jarvis
   if (
-    /\b(meus|minha|quais|lista(r)?|mostra(r)?|ver|veja|mostre)\s+(os\s+)?(meus\s+)?(contatos?|numeros?|pessoas?)\s*(salvos?|cadastrados?|da maya|que tenho)?\b/i.test(m) ||
+    /\b(meus|minha|quais|lista(r)?|mostra(r)?|ver|veja|mostre)\s+(os\s+)?(meus\s+)?(contatos?|numeros?|pessoas?)\s*(salvos?|cadastrados?|da maya|do jarvis|que tenho)?\b/i.test(m) ||
     /\bquem\s+(tenho|esta|estao|tenho\s+salvo)\s*(nos\s+)?(contatos?|agenda)?\b/i.test(m) ||
     /\bcontatos?\s+salvos?\b/i.test(m)
   )

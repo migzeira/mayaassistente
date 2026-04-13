@@ -254,7 +254,7 @@ export default function Anotacoes() {
           <p className="text-sm text-muted-foreground mt-0.5">
             {notes.length > 0
               ? `${notes.length} anotaç${notes.length === 1 ? "ão" : "ões"} salva${notes.length === 1 ? "" : "s"}`
-              : "Ideias, lembretes e informações salvas pela Maya"}
+              : "Ideias, lembretes e informações salvos pelo Jarvis"}
           </p>
         </div>
         <Button onClick={() => setCreateOpen(true)} className="gap-2">

@@ -75,7 +75,7 @@ export const DEFAULT_CATEGORIES = [
 
 /** Extrai dados estruturados de transações financeiras do texto do usuário.
  *  Se o usuário tem categorias customizadas (criadas via app), passe-as em
- *  userCategories para que a Maya use elas também. Fallback: DEFAULT_CATEGORIES. */
+ *  userCategories para que o Jarvis use elas também. Fallback: DEFAULT_CATEGORIES. */
 export async function extractTransactions(
   text: string,
   userCategories: string[] = DEFAULT_CATEGORIES
@@ -571,7 +571,7 @@ export async function analyzeForwardedContent(
 
   const system = "Voce classifica mensagens encaminhadas no WhatsApp para uma assistente pessoal brasileira. Responda APENAS com JSON valido, sem markdown.";
 
-  const prompt = `Uma pessoa encaminhou esta mensagem para sua assistente pessoal Maya. Analise e classifique.
+  const prompt = `Uma pessoa encaminhou esta mensagem para seu assistente pessoal Jarvis. Analise e classifique.
 
 Hoje: ${today}. Fuso: ${userTz}.
 
@@ -670,7 +670,7 @@ Responda SOMENTE com o JSON.`,
   }
 }
 
-/** Chat geral com o assistente Maya */
+/** Chat geral com o assistente Jarvis */
 export async function assistantChat(
   userMessage: string,
   agentName: string,

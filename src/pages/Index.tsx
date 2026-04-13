@@ -16,7 +16,7 @@ import notionImg from "@/assets/notion_logo.png";
 /* ─────────────────────────────────────────────────────────────────────────────
    TYPES
 ───────────────────────────────────────────────────────────────────────────── */
-type ChatLine = { from: "user" | "maya"; text: string; pause?: number };
+type ChatLine = { from: "user" | "jarvis"; text: string; pause?: number };
 type Accent   = "emerald" | "violet" | "amber" | "sky" | "pink";
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -24,53 +24,53 @@ type Accent   = "emerald" | "violet" | "amber" | "sky" | "pink";
 ───────────────────────────────────────────────────────────────────────────── */
 const CHAT_FINANCEIRO: ChatLine[] = [
   { from: "user",  text: "gastei 50 reais no mercado hoje",                           pause: 700  },
-  { from: "maya",  text: "🔴 Registrado!\n📝 Mercado\n💰 R$ 50,00\n📂 Alimentação ✅", pause: 900  },
+  { from: "jarvis",  text: "🔴 Registrado!\n📝 Mercado\n💰 R$ 50,00\n📂 Alimentação ✅", pause: 900  },
   { from: "user",  text: "recebi 2 mil de salário",                                   pause: 700  },
-  { from: "maya",  text: "🟢 Receita salva!\n📝 Salário\n💰 R$ 2.000,00 ✅",          pause: 900  },
+  { from: "jarvis",  text: "🟢 Receita salva!\n📝 Salário\n💰 R$ 2.000,00 ✅",          pause: 900  },
   { from: "user",  text: "paguei 120 de conta de luz",                                pause: 600  },
-  { from: "maya",  text: "🔴 Registrado!\n📝 Conta de luz\n💰 R$ 120,00\n📂 Moradia ✅", pause: 900 },
+  { from: "jarvis",  text: "🔴 Registrado!\n📝 Conta de luz\n💰 R$ 120,00\n📂 Moradia ✅", pause: 900 },
   { from: "user",  text: "quanto gastei essa semana?",                                pause: 600  },
-  { from: "maya",  text: "📊 Esta semana:\n🔴 Total: R$ 480,00\n\n🍔 Alimentação: R$ 220\n🏠 Moradia: R$ 120\n🚗 Transporte: R$ 85\n📦 Outros: R$ 55", pause: 0 },
+  { from: "jarvis",  text: "📊 Esta semana:\n🔴 Total: R$ 480,00\n\n🍔 Alimentação: R$ 220\n🏠 Moradia: R$ 120\n🚗 Transporte: R$ 85\n📦 Outros: R$ 55", pause: 0 },
 ];
 
 const CHAT_COMPROMISSOS: ChatLine[] = [
   { from: "user",  text: "marca dentista segunda 10h",                                pause: 700  },
-  { from: "maya",  text: "✅ Agendado!\n📅 Dentista — Seg, 07/04\n⏰ 10:00\n🔔 Lembro 1h antes\n📆 Google Calendar ✅", pause: 900 },
+  { from: "jarvis",  text: "✅ Agendado!\n📅 Dentista — Seg, 07/04\n⏰ 10:00\n🔔 Lembro 1h antes\n📆 Google Calendar ✅", pause: 900 },
   { from: "user",  text: "reunião com equipe quinta 14h",                             pause: 700  },
-  { from: "maya",  text: "✅ Salvo!\n📅 Reunião equipe — Qui, 10/04\n⏰ 14:00 ✅",     pause: 900  },
+  { from: "jarvis",  text: "✅ Salvo!\n📅 Reunião equipe — Qui, 10/04\n⏰ 14:00 ✅",     pause: 900  },
   { from: "user",  text: "almoço com minha mãe sábado meio-dia",                     pause: 700  },
-  { from: "maya",  text: "✅ Anotado!\n📅 Almoço com mamãe — Sáb, 12/04\n⏰ 12:00\n🔔 Aviso às 11:30 ✅", pause: 900 },
+  { from: "jarvis",  text: "✅ Anotado!\n📅 Almoço com mamãe — Sáb, 12/04\n⏰ 12:00\n🔔 Aviso às 11:30 ✅", pause: 900 },
   { from: "user",  text: "o que tenho amanhã?",                                       pause: 600  },
-  { from: "maya",  text: "📅 Amanhã, quarta:\n\n📌 Call diária — 09:00\n📌 Almoço Pedro — 12:30\n📌 Academia — 18:30\n📌 Série com Ju — 21:00", pause: 0 },
+  { from: "jarvis",  text: "📅 Amanhã, quarta:\n\n📌 Call diária — 09:00\n📌 Almoço Pedro — 12:30\n📌 Academia — 18:30\n📌 Série com Ju — 21:00", pause: 0 },
 ];
 
 const CHAT_AUDIO: ChatLine[] = [
   { from: "user",  text: "🎤 áudio 0:09",                                             pause: 600  },
-  { from: "maya",  text: "🎤 Transcrição:\n\"gastei 80 de jantar ontem no rodízio\"\n\n🔴 Jantar rodízio — R$ 80,00\n📂 Alimentação ✅", pause: 1000 },
+  { from: "jarvis",  text: "🎤 Transcrição:\n\"gastei 80 de jantar ontem no rodízio\"\n\n🔴 Jantar rodízio — R$ 80,00\n📂 Alimentação ✅", pause: 1000 },
   { from: "user",  text: "🎤 áudio 0:05",                                             pause: 600  },
-  { from: "maya",  text: "🎤 Transcrição:\n\"recebi 500 de freela\"\n\n🟢 Freela — R$ 500,00\n📂 Receita ✅", pause: 900  },
+  { from: "jarvis",  text: "🎤 Transcrição:\n\"recebi 500 de freela\"\n\n🟢 Freela — R$ 500,00\n📂 Receita ✅", pause: 900  },
   { from: "user",  text: "📸 [foto da nota fiscal]",                                  pause: 700  },
-  { from: "maya",  text: "📸 Nota fiscal lida!\n🛒 Supermercado Extra\n💰 R$ 143,60\n📂 Alimentação ✅\n\n📋 Itens detectados: 8 produtos", pause: 0 },
+  { from: "jarvis",  text: "📸 Nota fiscal lida!\n🛒 Supermercado Extra\n💰 R$ 143,60\n📂 Alimentação ✅\n\n📋 Itens detectados: 8 produtos", pause: 0 },
 ];
 
 const CHAT_LEMBRETES: ChatLine[] = [
   { from: "user",  text: "me lembra amanhã 7h da academia",                           pause: 700  },
-  { from: "maya",  text: "⏰ Criado!\n📌 Academia\n📅 Amanhã às 07:00\nVai arrasar! 💪", pause: 900 },
+  { from: "jarvis",  text: "⏰ Criado!\n📌 Academia\n📅 Amanhã às 07:00\nVai arrasar! 💪", pause: 900 },
   { from: "user",  text: "todo dia 5 me lembra de pagar a internet",                  pause: 700  },
-  { from: "maya",  text: "🔁 Lembrete recorrente!\n📌 Pagar internet\n📅 Todo dia 5 do mês ✅", pause: 900 },
+  { from: "jarvis",  text: "🔁 Lembrete recorrente!\n📌 Pagar internet\n📅 Todo dia 5 do mês ✅", pause: 900 },
   { from: "user",  text: "lembra eu de ligar pra minha mãe no domingo às 18h",       pause: 700  },
-  { from: "maya",  text: "🔁 Toda semana!\n📌 Ligar pra mamãe\n📅 Domingo às 18:00 ✅", pause: 0  },
+  { from: "jarvis",  text: "🔁 Toda semana!\n📌 Ligar pra mamãe\n📅 Domingo às 18:00 ✅", pause: 0  },
 ];
 
 const CHAT_HERO: ChatLine[] = [
   { from: "user",  text: "gastei 45 de gasolina",                                     pause: 700  },
-  { from: "maya",  text: "🔴 Registrado!\n📝 Gasolina\n💰 R$ 45,00\n📂 Transporte ✅", pause: 900 },
+  { from: "jarvis",  text: "🔴 Registrado!\n📝 Gasolina\n💰 R$ 45,00\n📂 Transporte ✅", pause: 900 },
   { from: "user",  text: "marca reunião amanhã 14h",                                  pause: 700  },
-  { from: "maya",  text: "✅ Agendado!\n📅 Reunião — Amanhã às 14:00\n🔔 Lembro 30 min antes ✅", pause: 900 },
+  { from: "jarvis",  text: "✅ Agendado!\n📅 Reunião — Amanhã às 14:00\n🔔 Lembro 30 min antes ✅", pause: 900 },
   { from: "user",  text: "me lembra dia 10 de pagar aluguel",                         pause: 700  },
-  { from: "maya",  text: "🔁 Lembrete mensal criado!\n📌 Pagar aluguel\n📅 Todo dia 10 ✅",       pause: 900 },
+  { from: "jarvis",  text: "🔁 Lembrete mensal criado!\n📌 Pagar aluguel\n📅 Todo dia 10 ✅",       pause: 900 },
   { from: "user",  text: "quanto gastei esse mês?",                                   pause: 700  },
-  { from: "maya",  text: "📊 Abril até agora:\n🔴 Gastos: R$ 1.820,00\n🟢 Receitas: R$ 4.500,00\n💰 Saldo: R$ 2.680,00 ✅", pause: 0 },
+  { from: "jarvis",  text: "📊 Abril até agora:\n🔴 Gastos: R$ 1.820,00\n🟢 Receitas: R$ 4.500,00\n💰 Saldo: R$ 2.680,00 ✅", pause: 0 },
 ];
 
 const FAQS = [
@@ -78,8 +78,8 @@ const FAQS = [
   { q: "Meus dados são seguros?",          a: "Sim. Criptografia AES-256, servidores no Brasil. Seus dados são seus e nunca são compartilhados com terceiros." },
   { q: "Funciona com qualquer WhatsApp?",  a: "Sim, pessoal ou Business, qualquer número brasileiro." },
   { q: "Posso cancelar quando quiser?",    a: "Sim, sem fidelidade e sem burocracia. Cancele direto pelo app a qualquer momento." },
-  { q: "A Maya responde rápido?",          a: "Em segundos, 24 horas por dia, 7 dias por semana, feriados incluídos." },
-  { q: "Funciona com áudio e foto?",       a: "Sim! Mande áudio e a Maya transcreve e registra. Fotografe nota fiscal e ela extrai o valor e categoriza automaticamente." },
+  { q: "O Jarvis responde rápido?",          a: "Em segundos, 24 horas por dia, 7 dias por semana, feriados incluídos." },
+  { q: "Funciona com áudio e foto?",       a: "Sim! Mande áudio e o Jarvis transcreve e registra. Fotografe nota fiscal e ele extrai o valor e categoriza automaticamente." },
 ];
 
 const PLAN_FEATURES = [
@@ -103,14 +103,14 @@ const PLAN_FEATURES = [
 ───────────────────────────────────────────────────────────────────────────── */
 function LogoFull() {
   return (
-    <img src={logoEscrita} alt="Minha Maya" className="h-8 w-auto object-contain" />
+    <img src={logoEscrita} alt="Hey Jarvis" className="h-8 w-auto object-contain" />
   );
 }
 
 function ChatAvatar() {
   return (
     <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0 border border-white/10 bg-[#16162a]">
-      <img src={logoIcon} alt="Minha Maya" width={36} height={36} className="w-full h-full object-contain p-1" />
+      <img src={logoIcon} alt="Hey Jarvis" width={36} height={36} className="w-full h-full object-contain p-1" />
     </div>
   );
 }
@@ -209,7 +209,7 @@ function AutoChat({ lines, accent = "violet" }: { lines: ChatLine[]; accent?: Ac
         started.current = true;
         let delay = 500;
         lines.forEach((line, i) => {
-          if (line.from === "maya") {
+          if (line.from === "jarvis") {
             setTimeout(() => setTyping(true),  delay);
             setTimeout(() => { setTyping(false); setShown(p => [...p, i]); }, delay + 820);
             delay += 820 + (line.pause ?? 1000);
@@ -258,7 +258,7 @@ function AutoChat({ lines, accent = "violet" }: { lines: ChatLine[]; accent?: Ac
         <div className="flex items-center gap-2.5 px-4 py-3 bg-[#16162a] border-b border-white/[0.06]">
           <ChatAvatar />
           <div>
-            <p className="text-[12px] font-semibold text-white leading-none mb-0.5">Minha Maya</p>
+            <p className="text-[12px] font-semibold text-white leading-none mb-0.5">Hey Jarvis</p>
             <p className="flex items-center gap-1 text-[10px] text-emerald-400">
               <span className={`w-1.5 h-1.5 ${dotColor[accent]} rounded-full animate-pulse`} />online agora
             </p>
@@ -321,7 +321,7 @@ function HeroPhone() {
     const timers: ReturnType<typeof setTimeout>[] = [];
     let delay = 600;
     CHAT_HERO.forEach((line, i) => {
-      if (line.from === "maya") {
+      if (line.from === "jarvis") {
         timers.push(setTimeout(() => setTyping(true), delay));
         timers.push(setTimeout(() => {
           setTyping(false); setMsgs(p => [...p, { ...line, id: p.length }]);
@@ -362,7 +362,7 @@ function HeroPhone() {
         <div className="flex items-center gap-2.5 px-4 py-2.5 bg-[#16162a] border-b border-white/[0.06]">
           <ChatAvatar />
           <div>
-            <p className="text-[11px] font-semibold text-white leading-none mb-0.5">Minha Maya</p>
+            <p className="text-[11px] font-semibold text-white leading-none mb-0.5">Hey Jarvis</p>
             <p className="flex items-center gap-1 text-[10px] text-emerald-400">
               <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />online
             </p>
@@ -647,7 +647,7 @@ function PricingSection() {
           <div className="relative rounded-2xl border border-violet-500/40 bg-[#0d0d1a] overflow-hidden shadow-2xl shadow-violet-500/10">
             <div className="bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-3 flex items-center justify-center gap-2">
               <Sparkles className="w-4 h-4 text-white" />
-              <span className="text-[13px] font-bold text-white tracking-wide">Minha Maya Completo</span>
+              <span className="text-[13px] font-bold text-white tracking-wide">Hey Jarvis Completo</span>
             </div>
 
             <div className="p-8">
@@ -782,7 +782,7 @@ export default function Index() {
             </AnimateIn>
             <AnimateIn delay={160}>
               <p className="mt-5 text-[17px] text-gray-400 leading-relaxed max-w-xl mx-auto">
-                A Maya organiza suas finanças, gerencia sua agenda e te lembra de tudo o que importa. Tudo isso direto pelo WhatsApp.
+                O Jarvis organiza suas finanças, gerencia sua agenda e te lembra de tudo o que importa. Tudo isso direto pelo WhatsApp.
               </p>
             </AnimateIn>
             <AnimateIn delay={240}>
@@ -808,7 +808,7 @@ export default function Index() {
           </div>
 
           <AnimateIn from="scale" delay={120}>
-            <GifPhone src="/gifs/gif-inicial.webm" alt="Maya no WhatsApp" />
+            <GifPhone src="/gifs/gif-inicial.webm" alt="Jarvis no WhatsApp" />
           </AnimateIn>
         </div>
         <div className="absolute bottom-0 inset-x-0 h-24 bg-gradient-to-t from-[#03030a] to-transparent pointer-events-none" />
@@ -838,7 +838,7 @@ export default function Index() {
                   Trabalho, família, contas, compromissos. A maioria das pessoas vive apagando incêndio.
                 </p>
                 <p className="text-[15px] text-gray-400 leading-relaxed">
-                  A <span className="text-white font-medium">Minha Maya</span> tira esse peso das suas costas: ela registra, organiza e te lembra de tudo, direto no WhatsApp onde você já está.
+                  A <span className="text-white font-medium">Hey Jarvis</span> tira esse peso das suas costas: ela registra, organiza e te lembra de tudo, direto no WhatsApp onde você já está.
                 </p>
                 <Button size="lg" asChild
                   className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white h-11 px-7 rounded-xl shadow-lg shadow-violet-500/25 hover:-translate-y-px transition-all duration-200 font-semibold">
@@ -859,7 +859,7 @@ export default function Index() {
                 Sabe pra onde vai<br /><span className="text-emerald-400">o seu dinheiro?</span>
               </h2>
               <p className="text-gray-400 leading-relaxed">
-                Você manda <em className="text-white not-italic font-medium">"gastei 50 no mercado"</em> e pronto. A Maya registra, categoriza e atualiza seus relatórios na hora. Sem planilha, sem app separado.
+                Você manda <em className="text-white not-italic font-medium">"gastei 50 no mercado"</em> e pronto. O Jarvis registra, categoriza e atualiza seus relatórios na hora. Sem planilha, sem app separado.
               </p>
               <ul className="space-y-3">
                 {[
@@ -884,7 +884,7 @@ export default function Index() {
             </div>
           </AnimateIn>
           <AnimateIn from="right">
-            <GifPhone src="/gifs/gif-gastos.webm" alt="Maya controlando gastos" />
+            <GifPhone src="/gifs/gif-gastos.webm" alt="Jarvis controlando gastos" />
           </AnimateIn>
         </div>
       </Section>
@@ -893,7 +893,7 @@ export default function Index() {
       <Section>
         <div className="grid lg:grid-cols-2 gap-16 items-center">
           <AnimateIn from="left" className="order-2 lg:order-1">
-            <GifPhone src="/gifs/gif-lembretes.webm" alt="Maya gerenciando lembretes" />
+            <GifPhone src="/gifs/gif-lembretes.webm" alt="Jarvis gerenciando lembretes" />
           </AnimateIn>
           <AnimateIn from="right" className="order-1 lg:order-2">
             <div className="space-y-6">
@@ -901,7 +901,7 @@ export default function Index() {
                 Você nunca mais esquecer<br /><span className="text-amber-400">de nada importante</span>
               </h2>
               <p className="text-gray-400 leading-relaxed">
-                Fala com a Maya como falaria com alguém de confiança: <em className="text-white not-italic font-medium">"me lembra dia 10 de pagar a internet"</em>. Ela cria, repete todo mês e te avisa na hora certa.
+                Fala com o Jarvis como falaria com alguém de confiança: <em className="text-white not-italic font-medium">"me lembra dia 10 de pagar a internet"</em>. Ela cria, repete todo mês e te avisa na hora certa.
               </p>
               <ul className="space-y-3">
                 {[
@@ -947,7 +947,7 @@ export default function Index() {
               <div className="space-y-5">
                 {[
                   { icon: MessageCircle, title: "Texto",      desc: "\"gastei 50 no mercado\" — direto e simples.",               color: "text-sky-400",   bg: "bg-sky-500/20 border-sky-500/30"   },
-                  { icon: Mic,           title: "Áudio",      desc: "Fale enquanto dirige. A Maya transcreve e registra.",         color: "text-violet-400",bg: "bg-violet-500/20 border-violet-500/30" },
+                  { icon: Mic,           title: "Áudio",      desc: "Fale enquanto dirige. O Jarvis transcreve e registra.",         color: "text-violet-400",bg: "bg-violet-500/20 border-violet-500/30" },
                   { icon: Camera,        title: "Foto da NF", desc: "Fotografe o cupom. Ela extrai valor e categoria na hora.",    color: "text-pink-400",  bg: "bg-pink-500/20 border-pink-500/30"   },
                 ].map(f => (
                   <div key={f.title} className="flex items-start gap-4">
@@ -963,7 +963,7 @@ export default function Index() {
               </div>
             </AnimateIn>
             <AnimateIn from="right">
-              <GifPhone src="/gifs/gif-contatos.webm" alt="Maya processando mensagens" />
+              <GifPhone src="/gifs/gif-contatos.webm" alt="Jarvis processando mensagens" />
             </AnimateIn>
           </div>
         </div>
@@ -978,7 +978,7 @@ export default function Index() {
                 Sua agenda sempre<br /><span className="text-violet-400">no controle</span>
               </h2>
               <p className="text-gray-400 leading-relaxed">
-                Esquece o formulário. Fala como você fala com qualquer pessoa: <em className="text-white not-italic font-medium">"marca reunião amanhã 14h"</em>. A Maya agenda, te lembra antes e sincroniza com seu Google Calendar.
+                Esquece o formulário. Fala como você fala com qualquer pessoa: <em className="text-white not-italic font-medium">"marca reunião amanhã 14h"</em>. O Jarvis agenda, te lembra antes e sincroniza com seu Google Calendar.
               </p>
               <ul className="space-y-3">
                 {[
@@ -1003,7 +1003,7 @@ export default function Index() {
             </div>
           </AnimateIn>
           <AnimateIn from="right">
-            <GifPhone src="/gifs/gif-reuniao.webm" alt="Maya gerenciando agenda" />
+            <GifPhone src="/gifs/gif-reuniao.webm" alt="Jarvis gerenciando agenda" />
           </AnimateIn>
         </div>
       </Section>
@@ -1017,7 +1017,7 @@ export default function Index() {
           <AnimateIn from="right" className="order-1 lg:order-2">
             <div className="space-y-6">
               <h2 className="text-[38px] font-extrabold tracking-tight leading-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                Tudo organizado,<br /><span className="text-indigo-400">só falando com a Maya pelo Whatsapp</span>
+                Tudo organizado,<br /><span className="text-indigo-400">só falando com o Jarvis pelo Whatsapp</span>
               </h2>
               <p className="text-gray-400 leading-relaxed">
                 Cada mensagem que você manda no WhatsApp vira dado organizado no seu painel. Você fala, ela registra, o dashboard atualiza sozinho.
@@ -1052,7 +1052,7 @@ export default function Index() {
                 Do jeito que você pensa,<br /><span className="text-pink-400">não do jeito do sistema</span>
               </h2>
               <p className="text-gray-400 leading-relaxed">
-                A Maya já vem com categorias prontas pro dia a dia. Mas se a sua vida não se encaixa em caixas padrão, crie quantas categorias personalizadas precisar.
+                O Jarvis já vem com categorias prontas pro dia a dia. Mas se a sua vida não se encaixa em caixas padrão, crie quantas categorias personalizadas precisar.
               </p>
               <ul className="space-y-3">
                 {[
@@ -1087,7 +1087,7 @@ export default function Index() {
                 Já usa essas ferramentas?
               </h2>
               <p className="mt-3 text-[15px] text-gray-400 max-w-md mx-auto">
-                A Maya conecta tudo o que você já usa no dia a dia
+                O Jarvis conecta tudo o que você já usa no dia a dia
               </p>
             </div>
           </AnimateIn>
@@ -1152,7 +1152,7 @@ export default function Index() {
                 Números que falam por si
               </h2>
               <p className="mt-3 text-[15px] text-gray-400 max-w-md mx-auto">
-                Cada número é resultado de gente real usando a Maya todos os dias
+                Cada número é resultado de gente real usando o Jarvis todos os dias
               </p>
             </div>
           </AnimateIn>
@@ -1178,7 +1178,7 @@ export default function Index() {
 
           <AnimateIn delay={280}>
             <p className="mt-8 text-center text-[13px] text-gray-600">
-              92% dos usuários avaliaram como excelente a Minha Maya. Baseado em dados reais dos últimos 3 meses.
+              92% dos usuários avaliaram como excelente a Hey Jarvis. Baseado em dados reais dos últimos 3 meses.
             </p>
           </AnimateIn>
         </div>
@@ -1203,7 +1203,7 @@ export default function Index() {
         <div className="flex overflow-hidden mb-4">
           <div className="flex animate-marquee flex-shrink-0 gap-0" style={{ width: "max-content" }}>
             {[...Array(2)].flatMap(() => [
-              { name: "Amanda Ferreira",  role: "Designer Freelancer", text: "Finalmente controlo meus gastos sem planilha. Mando áudio no carro e a Maya registra tudo." },
+              { name: "Amanda Ferreira",  role: "Designer Freelancer", text: "Finalmente controlo meus gastos sem planilha. Mando áudio no carro e o Jarvis registra tudo." },
               { name: "Carlos Mendes",    role: "Empreendedor",        text: "Uso há 3 meses. Agenda, finanças e lembretes num único lugar. Mudou minha rotina." },
               { name: "Priya Nair",       role: "Advogada",            text: "Fotografei nota fiscal e ela categorizou na hora. Não acreditei que funcionou de primeira!" },
               { name: "Lucas Oliveira",   role: "Médico",              text: "Lembretes recorrentes me salvaram. Nunca mais esqueci contas fixas desde que comecei a usar." },
@@ -1328,13 +1328,13 @@ export default function Index() {
               <ul className="space-y-2.5">
                 <li><Link to="/signup" className="text-[13px] text-gray-500 hover:text-white transition-colors">Criar conta</Link></li>
                 <li><Link to="/login"  className="text-[13px] text-gray-500 hover:text-white transition-colors">Entrar</Link></li>
-                <li><a href="mailto:suporte@minhamaya.com.br" className="text-[13px] text-gray-500 hover:text-white transition-colors">Suporte</a></li>
+                <li><a href="mailto:suporte@heyjarvis.com.br" className="text-[13px] text-gray-500 hover:text-white transition-colors">Suporte</a></li>
               </ul>
             </div>
           </div>
           <div className="pt-8 border-t border-white/[0.06] flex flex-col md:flex-row justify-between items-center gap-4 text-[12px] text-gray-600">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span>© 2026 Minha Maya · Todos os direitos reservados</span>
+              <span>© 2026 Hey Jarvis · Todos os direitos reservados</span>
               <span>·</span>
               <Link to="/termos-de-uso" className="text-gray-500 hover:text-white transition-colors">Termos de Uso</Link>
               <span>·</span>

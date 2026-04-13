@@ -34,7 +34,7 @@ const Analytics = lazy(() => import("./pages/dashboard/Analytics"));
 const Contatos = lazy(() => import("./pages/dashboard/Contatos"));
 const AdminPanel = lazy(() => import("./pages/admin/AdminPanel"));
 
-// Loading com logo da Maya girando
+// Loading com logo do Jarvis girando
 function PageLoader() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">

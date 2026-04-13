@@ -176,7 +176,7 @@ export default function MeuPerfil() {
   // Plan gate: só pode cadastrar/editar WhatsApp se tiver plano ativo
   // Verifica account_status E access_until (se tiver data, precisa estar no futuro).
   // Sem essa segunda checagem, um user expirado com status ainda 'active' no banco
-  // (antes do cron rodar) conseguia cadastrar WhatsApp e depois a Maya bloqueava no webhook.
+  // (antes do cron rodar) conseguia cadastrar WhatsApp e depois o Jarvis bloqueava no webhook.
   const hasActivePlan =
     profile?.account_status === "active" &&
     (!profile?.access_until || new Date(profile.access_until) > new Date());
@@ -213,7 +213,7 @@ export default function MeuPerfil() {
 
       // Verifica se o número já está cadastrado em OUTRA conta.
       // Não pode ter o mesmo número em 2 contas — é uma única conversa
-      // no WhatsApp com o número da Maya, não tem como distinguir.
+      // no WhatsApp com o número do Jarvis, não tem como distinguir.
       if (newPhone && isRealChange) {
         const { data: existing } = await supabase
           .from("profiles")
@@ -224,7 +224,7 @@ export default function MeuPerfil() {
 
         if (existing) {
           toast.error(
-            `Este número já está cadastrado em outra conta da Minha Maya. ` +
+            `Este número já está cadastrado em outra conta do Hey Jarvis. ` +
             `Cada número só pode ser usado em uma conta. Use outro número.`
           );
           setSaving(false);
@@ -263,12 +263,12 @@ export default function MeuPerfil() {
         if (remaining <= 0) {
           toast.success("Número salvo! ⚠️ Este foi seu último ajuste permitido.");
         } else if (!storedPhone) {
-          toast.success("🎉 Número salvo! Agora ative o agente na aba Início e envie uma mensagem pra Maya.");
+          toast.success("🎉 Número salvo! Agora ative o agente na aba Início e envie uma mensagem pro Jarvis.");
         } else {
           toast.success(`Número atualizado! Você ainda pode alterá-lo mais ${remaining} vez${remaining === 1 ? "" : "es"}.`);
         }
       } else if (!newPhone) {
-        toast.success("Número removido. A Maya não responderá até você adicionar um número.");
+        toast.success("Número removido. O Jarvis não responderá até você adicionar um número.");
       } else {
         toast.success("Perfil atualizado!");
       }
@@ -277,7 +277,7 @@ export default function MeuPerfil() {
     }
   };
 
-  // Chama a edge function whatsapp-link-init que gera um código MAYA-XXXXXX
+  // Chama a edge function whatsapp-link-init que gera um código JARVIS-XXXXXX
   // e envia pro WhatsApp do usuário via Evolution API.
   const sendLinkCode = async (opts: { silent?: boolean } = {}) => {
     setLinking(true);
@@ -308,13 +308,13 @@ export default function MeuPerfil() {
       if (!opts.silent) {
         if (data.linked) {
           // Resolvido direto pelo endpoint do Evolution — cliente já está vinculado
-          toast.success("✅ WhatsApp conectado! Pode começar a usar a Maya agora.");
+          toast.success("✅ WhatsApp conectado! Pode começar a usar o Jarvis agora.");
           // Atualiza profile local pra refletir o whatsapp_lid preenchido
           setProfile((p: any) => ({ ...p, whatsapp_lid: data.jid }));
         } else if (data.sent) {
           toast.success('✅ Mensagem enviada no seu WhatsApp. Responda "oi" lá pra ativar.');
         } else {
-          toast.warning("Mensagem gerada. Abra o WhatsApp da Maya e mande qualquer mensagem.");
+          toast.warning("Mensagem gerada. Abra o WhatsApp do Jarvis e mande qualquer mensagem.");
         }
       }
     } catch (err) {
@@ -333,7 +333,7 @@ export default function MeuPerfil() {
   const subscriptionCancelledAt = profile?.subscription_cancelled_at ? new Date(profile.subscription_cancelled_at) : null;
   const planLabel = (() => {
     // Sem plano ativo: account_status != 'active' OU sem access_source
-    // (conta nova com plan default 'maya_mensal' do trigger NÃO é plano ativo)
+    // (conta nova com plan default 'jarvis_mensal' do trigger NÃO é plano ativo)
     if (profile?.account_status !== "active") return "Sem plano ativo";
     if (accessSource === "admin_trial") return "Período teste";
     const planName = profile?.plan === "maya_anual" ? "Anual"
@@ -394,14 +394,14 @@ export default function MeuPerfil() {
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {profile.account_status === "suspended"
                     ? "Acesso suspenso"
-                    : "Sem plano ativo — assine para usar a Maya"}
+                    : "Sem plano ativo — assine para usar o Jarvis"}
                 </p>
               )}
             </div>
             <StatusBadge status={profile.account_status} />
           </div>
           {!hasActivePlan && (
-            <a href="https://minhamaya.com" target="_blank" rel="noopener noreferrer" className="block">
+            <a href="https://heyjarvis.com.br" target="_blank" rel="noopener noreferrer" className="block">
               <Button className="w-full gap-2" variant="default">
                 <ExternalLink className="h-4 w-4" />
                 Ver planos
@@ -422,7 +422,7 @@ export default function MeuPerfil() {
             <Input
               value={profile.display_name || ""}
               onChange={e => setProfile({ ...profile, display_name: e.target.value })}
-              placeholder="Como quer ser chamado pela Maya"
+              placeholder="Como quer ser chamado pelo Jarvis"
             />
           </div>
           <div className="space-y-2">
@@ -483,9 +483,9 @@ export default function MeuPerfil() {
               <div className="flex-1">
                 <p className="font-semibold text-violet-100">Assine um plano para cadastrar seu WhatsApp</p>
                 <p className="mt-0.5 text-violet-300/80 text-xs">
-                  Você precisa de uma assinatura ativa (mensal ou anual) para que a Maya possa responder no seu número.
+                  Você precisa de uma assinatura ativa (mensal ou anual) para que o Jarvis possa responder no seu número.
                 </p>
-                <a href="https://minhamaya.com" target="_blank" rel="noopener noreferrer" className="inline-block mt-2">
+                <a href="https://heyjarvis.com.br" target="_blank" rel="noopener noreferrer" className="inline-block mt-2">
                   <Button size="sm" variant="outline" className="h-8 text-xs border-violet-500/40 text-violet-200 hover:bg-violet-500/20">
                     <ExternalLink className="mr-1 h-3 w-3" /> Ver planos
                   </Button>
@@ -500,7 +500,7 @@ export default function MeuPerfil() {
               <Info className="h-4 w-4 shrink-0 mt-0.5 text-primary" />
               <div>
                 <p className="font-semibold text-foreground">Nenhum número ativo</p>
-                <p className="mt-0.5">Selecione o país, informe seu número com DDD e clique em <span className="font-medium text-foreground">Salvar</span> — a Maya será ativada automaticamente no seu WhatsApp.</p>
+                <p className="mt-0.5">Selecione o país, informe seu número com DDD e clique em <span className="font-medium text-foreground">Salvar</span> — o Jarvis será ativado automaticamente no seu WhatsApp.</p>
               </div>
             </div>
           )}
@@ -511,7 +511,7 @@ export default function MeuPerfil() {
               <div>
                 <p className="font-semibold">WhatsApp vinculado ✓</p>
                 <p className="mt-0.5">
-                  A Maya está respondendo no <span className="font-mono font-medium text-green-100">{formatFullPhone(profile.phone_number)}</span>
+                  O Jarvis está respondendo no <span className="font-mono font-medium text-green-100">{formatFullPhone(profile.phone_number)}</span>
                 </p>
                 {changesRemaining > 0 && changesRemaining < MAX_PHONE_CHANGES && (
                   <p className="mt-1.5 text-green-300/70 text-xs">
@@ -522,21 +522,21 @@ export default function MeuPerfil() {
             </div>
           )}
 
-          {/* Número ativo — instruções pra conectar com a Maya */}
+          {/* Número ativo — instruções pra conectar com o Jarvis */}
           {profile.phone_number && !isPhoneLocked && !profile.whatsapp_lid && hasActivePlan && (
             <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 text-sm text-blue-200">
               <Smartphone className="h-4 w-4 shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="font-semibold text-blue-100">Número ativo na plataforma!</p>
                 <p className="mt-1 text-blue-200/80">
-                  Agora ative o agente na aba <span className="font-semibold text-blue-100">Início</span> (toggle de liga/desliga) e depois envie uma mensagem pra Maya.
+                  Agora ative o agente na aba <span className="font-semibold text-blue-100">Início</span> (toggle de liga/desliga) e depois envie uma mensagem pro Jarvis.
                 </p>
                 <p className="mt-2 text-blue-200/80">
-                  Número da Maya: <span className="font-mono font-semibold text-blue-100">+55 11 93619-6103</span>
+                  Número do Jarvis: <span className="font-mono font-semibold text-blue-100">+55 11 93619-6103</span>
                 </p>
                 <div className="flex flex-wrap gap-2 mt-3">
                   <a
-                    href="https://wa.me/5511936196103?text=Acabei%20de%20ativar%20minha%20Maya!%20%F0%9F%9A%80"
+                    href="https://wa.me/5511936196103?text=Acabei%20de%20ativar%20meu%20Jarvis!%20%F0%9F%9A%80"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -545,7 +545,7 @@ export default function MeuPerfil() {
                       variant="default"
                       className="h-8 text-xs bg-green-600 hover:bg-green-500"
                     >
-                      <MessageSquare className="mr-1 h-3 w-3" /> Enviar mensagem pra Maya
+                      <MessageSquare className="mr-1 h-3 w-3" /> Enviar mensagem pro Jarvis
                     </Button>
                   </a>
                 </div>
