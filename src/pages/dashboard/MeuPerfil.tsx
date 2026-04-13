@@ -314,6 +314,9 @@ export default function MeuPerfil() {
   const accessSource = profile?.access_source as string | null;
   const subscriptionCancelledAt = profile?.subscription_cancelled_at ? new Date(profile.subscription_cancelled_at) : null;
   const planLabel = (() => {
+    // Sem plano ativo: account_status != 'active' OU sem access_source
+    // (conta nova com plan default 'maya_mensal' do trigger NÃO é plano ativo)
+    if (profile?.account_status !== "active") return "Sem plano ativo";
     if (accessSource === "admin_trial") return "Período teste";
     const planName = profile?.plan === "maya_anual" ? "Anual"
       : profile?.plan === "maya_mensal" ? "Mensal"
