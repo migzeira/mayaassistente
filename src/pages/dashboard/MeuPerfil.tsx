@@ -236,7 +236,7 @@ export default function MeuPerfil() {
         : changesCount;
 
       // NÃO altera account_status aqui — isso é função do admin ou Kirvano webhook.
-      // O trigger sync_account_status_on_phone_change só reverte pra pending se limpar o número.
+      // Limpar o número NÃO muda o plano. Uma coisa não interfere na outra.
       const { error } = await supabase.from("profiles").update({
         display_name: profile.display_name?.trim() || null,
         phone_number: newPhone,
@@ -254,7 +254,7 @@ export default function MeuPerfil() {
         ...profile,
         phone_number: newPhone,
         phone_changes_count: newChangesCount,
-        ...(!newPhone && { account_status: "pending" }),
+        // NÃO muda account_status ao limpar phone — plano continua ativo
       };
       setProfile(updatedProfile);
 
