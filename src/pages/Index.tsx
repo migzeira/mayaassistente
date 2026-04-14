@@ -723,14 +723,6 @@ export default function Index() {
       }`}>
         <div className="max-w-6xl mx-auto px-4 h-15 flex items-center justify-between py-3">
           <LogoFull />
-          <nav className="hidden md:flex items-center gap-7 text-[13px] text-gray-400">
-            {[["#como-funciona","Como funciona"],["#planos","Planos"],["#faq","FAQ"]].map(([h,l]) => (
-              <a key={h} href={h} className="hover:text-white transition-colors relative group">
-                {l}
-                <span className="absolute -bottom-0.5 left-0 w-0 group-hover:w-full h-px bg-gradient-to-r from-violet-500 to-purple-400 transition-all duration-300" />
-              </a>
-            ))}
-          </nav>
           <div className="hidden sm:flex items-center gap-2">
             <Button variant="ghost" size="sm" className="text-gray-300 hover:text-white hover:bg-white/8" asChild>
               <Link to="/login">Login</Link>
@@ -1316,14 +1308,6 @@ export default function Index() {
                 <Stars />
                 <span className="text-[12px] text-gray-500 ml-1">4.9 · +1.200 avaliações</span>
               </div>
-            </div>
-            <div>
-              <p className="text-[13px] font-semibold text-gray-300 mb-4">Produto</p>
-              <ul className="space-y-2.5">
-                {[["#como-funciona","Como funciona"],["#planos","Planos"],["#faq","FAQ"]].map(([h,l]) => (
-                  <li key={h}><a href={h} className="text-[13px] text-gray-500 hover:text-white transition-colors">{l}</a></li>
-                ))}
-              </ul>
             </div>
             <div>
               <p className="text-[13px] font-semibold text-gray-300 mb-4">Conta</p>
