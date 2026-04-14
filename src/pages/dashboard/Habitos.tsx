@@ -382,6 +382,7 @@ export default function Habitos() {
     name: "", description: "", reminder_time: "08:00",
     icon: "🎯", color: "#6366f1",
     target_days: [0, 1, 2, 3, 4, 5, 6] as number[],
+    is_recurring: false, interval: 2, startTime: "08:00", endTime: "22:00",
   });
 
   // ── Load data ──────────────────────────────────
@@ -661,18 +662,45 @@ export default function Habitos() {
     e.preventDefault();
     if (!customForm.name.trim()) { toast.error("Nome obrigatório"); return; }
 
+    // Se recorrente, gera múltiplos horários via intervalo
+    const isRecurring = customForm.is_recurring;
+    const reminderTimes = isRecurring
+      ? generateIntervalTimes(customForm.interval, customForm.startTime, customForm.endTime)
+      : [customForm.reminder_time];
+
+    if (isRecurring && reminderTimes.length === 0) {
+      toast.error("Horário de início deve ser menor que o de fim.");
+      return;
+    }
+
     const payload = {
       name: customForm.name.trim(),
       description: customForm.description.trim() || null,
-      frequency: "daily",
-      times_per_day: 1,
-      reminder_times: JSON.stringify([customForm.reminder_time]),
+      frequency: isRecurring ? "hourly" : "daily",
+      times_per_day: reminderTimes.length,
+      reminder_times: JSON.stringify(reminderTimes),
       target_days: JSON.stringify(customForm.target_days),
       icon: customForm.icon,
       color: customForm.color,
-      habit_config: { time: customForm.reminder_time },
+      habit_config: isRecurring
+        ? { interval: customForm.interval, startTime: customForm.startTime, endTime: customForm.endTime }
+        : { time: customForm.reminder_time },
       updated_at: new Date().toISOString(),
     };
+
+    // Helper: cria reminders (1 por horário) para o hábito
+    const buildHabitReminders = (habitId: string) =>
+      reminderTimes.map(t => ({
+        user_id: user!.id,
+        habit_id: habitId,
+        whatsapp_number: userPhone,
+        title: customForm.name.trim(),
+        message: `⏰ Hora do seu hábito: *${customForm.name.trim()}*${isRecurring ? ` (${t})` : ""}`,
+        send_at: nextDailyUTC(t),
+        recurrence: "daily",
+        source: "habit",
+        status: "pending",
+      }));
 
     if (editingCustom) {
       const { error } = await (supabase.from("habits" as any).update(payload as any).eq("id", editingCustom.id) as any);
@@ -683,16 +711,10 @@ export default function Habitos() {
           .delete()
           .eq("habit_id", editingCustom.id)
           .eq("status", "pending");
-        await (supabase.from("reminders" as any).insert({
-          user_id: user!.id,
-          whatsapp_number: userPhone,
-          title: customForm.name.trim(),
-          message: `⏰ Hora do seu hábito: *${customForm.name.trim()}*`,
-          send_at: nextDailyUTC(customForm.reminder_time),
-          recurrence: "daily",
-          source: "habit",
-          status: "pending",
-        } as any) as any);
+        const reminders = buildHabitReminders(editingCustom.id);
+        if (reminders.length > 0) {
+          await (supabase.from("reminders" as any).insert(reminders as any) as any);
+        }
       }
       toast.success("Hábito atualizado!");
     } else {
@@ -700,16 +722,10 @@ export default function Habitos() {
         .insert({ ...payload, user_id: user!.id } as any).select("id").single() as any);
       if (error) { toast.error("Erro ao criar: " + error.message); return; }
       if (userPhone && newHabit) {
-        await (supabase.from("reminders" as any).insert({
-          user_id: user!.id,
-          whatsapp_number: userPhone,
-          title: customForm.name.trim(),
-          message: `⏰ Hora do seu hábito: *${customForm.name.trim()}*`,
-          send_at: nextDailyUTC(customForm.reminder_time),
-          recurrence: "daily",
-          source: "habit",
-          status: "pending",
-        } as any) as any);
+        const reminders = buildHabitReminders(newHabit.id);
+        if (reminders.length > 0) {
+          await (supabase.from("reminders" as any).insert(reminders as any) as any);
+        }
       }
       toast.success("Hábito criado! 🎯");
     }
@@ -730,10 +746,16 @@ export default function Habitos() {
     setEditingCustom(h);
     const times = Array.isArray(h.reminder_times) ? h.reminder_times : JSON.parse(h.reminder_times as string);
     const days = Array.isArray(h.target_days) ? h.target_days : JSON.parse(h.target_days as string);
+    const cfg = (typeof h.habit_config === "object" && h.habit_config) ? h.habit_config as Record<string, any> : {};
+    const isRecurring = h.frequency === "hourly" || !!cfg.interval;
     setCustomForm({
       name: h.name, description: h.description ?? "",
       reminder_time: times[0] ?? "08:00",
       icon: h.icon, color: h.color, target_days: days,
+      is_recurring: isRecurring,
+      interval: cfg.interval ?? 2,
+      startTime: cfg.startTime ?? "08:00",
+      endTime: cfg.endTime ?? "22:00",
     });
     setCustomOpen(true);
   };
@@ -762,7 +784,7 @@ export default function Habitos() {
         </h1>
         <Button onClick={() => {
           setEditingCustom(null);
-          setCustomForm({ name: "", description: "", reminder_time: "08:00", icon: "🎯", color: "#6366f1", target_days: [0,1,2,3,4,5,6] });
+          setCustomForm({ name: "", description: "", reminder_time: "08:00", icon: "🎯", color: "#6366f1", target_days: [0,1,2,3,4,5,6], is_recurring: false, interval: 2, startTime: "08:00", endTime: "22:00" });
           setCustomOpen(true);
         }}>
           <Plus className="mr-2 h-4 w-4" /> Criar hábito
@@ -1026,14 +1048,75 @@ export default function Habitos() {
                 placeholder="Ex: Foco na respiração"
               />
             </div>
-            <div className="space-y-2">
-              <Label>Horário do lembrete</Label>
-              <Input
-                type="time"
-                value={customForm.reminder_time}
-                onChange={e => setCustomForm(f => ({ ...f, reminder_time: e.target.value }))}
+            {/* Horário: único OU recorrente */}
+            {!customForm.is_recurring && (
+              <div className="space-y-2">
+                <Label>Horário do lembrete</Label>
+                <Input
+                  type="time"
+                  value={customForm.reminder_time}
+                  onChange={e => setCustomForm(f => ({ ...f, reminder_time: e.target.value }))}
+                />
+              </div>
+            )}
+
+            {/* Toggle recorrência */}
+            <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border">
+              <div>
+                <p className="text-sm font-medium">Repetir a cada X horas</p>
+                <p className="text-xs text-muted-foreground">Lembrete recorrente ao longo do dia</p>
+              </div>
+              <Switch
+                checked={customForm.is_recurring}
+                onCheckedChange={v => setCustomForm(f => ({ ...f, is_recurring: v }))}
               />
             </div>
+
+            {/* Campos de intervalo (visíveis quando recorrente) */}
+            {customForm.is_recurring && (
+              <div className="space-y-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                <div className="space-y-2">
+                  <Label>Repetir a cada</Label>
+                  <Select
+                    value={String(customForm.interval)}
+                    onValueChange={v => setCustomForm(f => ({ ...f, interval: Number(v) }))}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 6, 8, 12].map(h => (
+                        <SelectItem key={h} value={String(h)}>{h}h em {h}h</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Início</Label>
+                    <Input
+                      type="time"
+                      value={customForm.startTime}
+                      onChange={e => setCustomForm(f => ({ ...f, startTime: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Fim</Label>
+                    <Input
+                      type="time"
+                      value={customForm.endTime}
+                      onChange={e => setCustomForm(f => ({ ...f, endTime: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {(() => {
+                    const times = generateIntervalTimes(customForm.interval, customForm.startTime, customForm.endTime);
+                    return times.length > 0
+                      ? `${times.length} lembretes: ${times.join(", ")}`
+                      : "Horário de início deve ser menor que o fim";
+                  })()}
+                </p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Ícone</Label>
               <div className="flex flex-wrap gap-1.5">

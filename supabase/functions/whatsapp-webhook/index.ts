@@ -5183,12 +5183,12 @@ async function processImageMessage(
 
     // 2. Resolve full profile PRIMEIRO (antes de qualquer sendText!)
     //    Padrão multi-fallback idêntico ao processMessage — inclui resolveLidToPhone
-    let profile: { id: string; phone_number: string; account_status: string } | null = null;
+    let profile: { id: string; phone_number: string; account_status: string; whatsapp_lid?: string | null } | null = null;
 
     if (lid) {
       const { data } = await supabase
         .from("profiles")
-        .select("id, phone_number, account_status")
+        .select("id, phone_number, account_status, whatsapp_lid")
         .eq("whatsapp_lid", lid)
         .maybeSingle();
       profile = data;
@@ -5196,11 +5196,18 @@ async function processImageMessage(
     if (!profile && phone) {
       const { data } = await supabase
         .from("profiles")
-        .select("id, phone_number, account_status")
+        .select("id, phone_number, account_status, whatsapp_lid")
         .or(`phone_number.eq.${phone},phone_number.eq.+${phone}`)
         .maybeSingle();
       profile = data;
     }
+
+    // Auto-link: perfil encontrado por phone mas LID ainda não salvo → vincula agora
+    if (profile && lid && !profile.whatsapp_lid) {
+      supabase.from("profiles").update({ whatsapp_lid: lid }).eq("id", profile.id).then(() => {}).catch(() => {});
+      log.push(`lid_auto_linked_by_phone: ${lid} → ${profile.id}`);
+    }
+
     // Fallback crítico: resolve LID → telefone real via Evolution API
     // Sem isso, sendText falha com 400 quando o usuário manda imagem via LID
     if (!profile && lid) {
@@ -5407,12 +5414,12 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
     }
 
     // ── Busca perfil por LID (novo WhatsApp) ou telefone (fallback) ──
-    let profile: { id: string; plan: string; messages_used: number; messages_limit: number; phone_number: string; account_status: string; timezone: string | null; access_until: string | null; display_name?: string | null } | null = null;
+    let profile: { id: string; plan: string; messages_used: number; messages_limit: number; phone_number: string; account_status: string; timezone: string | null; access_until: string | null; display_name?: string | null; whatsapp_lid?: string | null } | null = null;
 
     if (lid) {
       const { data } = await supabase
         .from("profiles")
-        .select("id, plan, messages_used, messages_limit, phone_number, account_status, timezone, access_until, display_name")
+        .select("id, plan, messages_used, messages_limit, phone_number, account_status, timezone, access_until, display_name, whatsapp_lid")
         .eq("whatsapp_lid", lid)
         .maybeSingle();
       profile = data;
@@ -5429,10 +5436,16 @@ async function processMessage(replyTo: string, text: string, lid: string | null 
       // Fallback: tenta por telefone (@s.whatsapp.net ou @lid → extrai dígitos)
       const { data } = await supabase
         .from("profiles")
-        .select("id, plan, messages_used, messages_limit, phone_number, account_status, timezone, access_until, display_name")
+        .select("id, plan, messages_used, messages_limit, phone_number, account_status, timezone, access_until, display_name, whatsapp_lid")
         .or(`phone_number.eq.${fallbackPhone},phone_number.eq.+${fallbackPhone}`)
         .maybeSingle();
       profile = data;
+    }
+
+    // Auto-link: perfil encontrado por phone mas LID ainda não salvo → vincula agora
+    if (profile && lid && !profile.whatsapp_lid) {
+      supabase.from("profiles").update({ whatsapp_lid: lid }).eq("id", profile.id).then(() => {}).catch(() => {});
+      log.push(`lid_auto_linked_by_phone: ${lid} → ${profile.id}`);
     }
 
     // Fallback adicional: busca em user_phone_numbers (múltiplos números - plano business)

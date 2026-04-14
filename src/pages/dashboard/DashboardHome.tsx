@@ -433,9 +433,9 @@ export default function DashboardHome() {
         <div className="flex items-center gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200">
           <AlertTriangle className="h-5 w-5 shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold">Ative o agente pra conversar com o Jarvis</p>
+            <p className="text-sm font-semibold">Agente desativado</p>
             <p className="text-xs text-amber-300/80 mt-0.5">
-              Seu número está cadastrado mas o agente está desativado. Ative o toggle abaixo pra que o Jarvis comece a responder no seu WhatsApp.
+              O agente está desligado. Ative o toggle abaixo pra que o Jarvis volte a responder no seu WhatsApp.
             </p>
           </div>
           <button
@@ -477,9 +477,9 @@ export default function DashboardHome() {
                 {
                   num: 2,
                   done: profile?.messages_used > 0,
-                  title: 'Mande "oi" no WhatsApp do Jarvis',
+                  title: "Converse com o Jarvis no WhatsApp",
                   hint: (profile?.messages_used === 0 && phoneSet)
-                    ? "Envie uma mensagem para o número do Jarvis e ele vai te responder" : null,
+                    ? "Abra o WhatsApp e mande uma mensagem pro Jarvis — ele já está pronto pra responder!" : null,
                 },
                 {
                   num: 3,

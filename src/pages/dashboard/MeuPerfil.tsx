@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import {
   Save, Clock, CheckCircle, XCircle, Info, Smartphone, Lock, AlertTriangle,
-  Crown, ExternalLink, Calendar, MessageSquare,
+  Crown, ExternalLink, Calendar, MessageSquare, Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -140,6 +140,7 @@ export default function MeuPerfil() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [linking, setLinking] = useState(false);
+  const [linkingStatus, setLinkingStatus] = useState<'idle' | 'linking' | 'linked' | 'pending'>('idle');
 
   // Phone fields (split from stored number)
   const [selectedDdi, setSelectedDdi] = useState("55");
@@ -237,12 +238,19 @@ export default function MeuPerfil() {
 
       // NÃO altera account_status aqui — isso é função do admin ou Kirvano webhook.
       // Limpar o número NÃO muda o plano. Uma coisa não interfere na outra.
-      const { error } = await supabase.from("profiles").update({
+      // Quando phone muda, limpa whatsapp_lid pra forçar re-link
+      const profileUpdate: Record<string, unknown> = {
         display_name: profile.display_name?.trim() || null,
         phone_number: newPhone,
         timezone: profile.timezone,
         phone_changes_count: newChangesCount,
-      }).eq("id", user!.id);
+      };
+      if (isRealChange) {
+        profileUpdate.whatsapp_lid = null;
+        profileUpdate.link_code = null;
+        profileUpdate.link_code_expires_at = null;
+      }
+      const { error } = await supabase.from("profiles").update(profileUpdate as any).eq("id", user!.id);
 
       if (error) {
         toast.error("Erro ao salvar. Tente novamente.");
@@ -259,15 +267,56 @@ export default function MeuPerfil() {
       setProfile(updatedProfile);
 
       if (isRealChange && newPhone) {
+        // Auto-link WhatsApp + auto-ativar agente em background
+        setLinkingStatus('linking');
         const remaining = MAX_PHONE_CHANGES - newChangesCount;
         if (remaining <= 0) {
-          toast.success("Número salvo! ⚠️ Este foi seu último ajuste permitido.");
-        } else if (!storedPhone) {
-          toast.success("🎉 Número salvo! Agora ative o agente na aba Início e envie uma mensagem pro Jarvis.");
+          toast.success("Número salvo! Ativando seu Jarvis...");
         } else {
-          toast.success(`Número atualizado! Você ainda pode alterá-lo mais ${remaining} vez${remaining === 1 ? "" : "es"}.`);
+          toast.success("Número salvo! Ativando seu Jarvis...");
         }
+
+        // Dispara em background — não bloqueia o save
+        (async () => {
+          try {
+            // 1. Auto-ativa o agente
+            await supabase
+              .from("agent_configs")
+              .upsert({ user_id: user!.id, is_active: true } as any, { onConflict: "user_id" });
+
+            // 2. Chama link-init pra vincular WhatsApp
+            const { data: sessionData } = await supabase.auth.getSession();
+            const token = sessionData?.session?.access_token;
+            if (!token) { setLinkingStatus('pending'); return; }
+
+            const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/whatsapp-link-init`;
+            const res = await fetch(url, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({}),
+            });
+            const data = await res.json();
+
+            if (data.linked && data.jid) {
+              // Resolvido direto — já vinculado!
+              setProfile((p: any) => ({ ...p, whatsapp_lid: data.jid }));
+              setLinkingStatus('linked');
+              toast.success("WhatsApp conectado! Pode conversar com o Jarvis agora.");
+            } else {
+              // Pending link — botão WhatsApp aparece, webhook linka na 1a mensagem
+              setLinkingStatus('pending');
+              toast.success("Jarvis ativado! Envie uma mensagem pra ele no WhatsApp.");
+            }
+          } catch {
+            // Falha de rede — webhook safety net cobre
+            setLinkingStatus('pending');
+          }
+        })();
       } else if (!newPhone) {
+        setLinkingStatus('idle');
         toast.success("Número removido. O Jarvis não responderá até você adicionar um número.");
       } else {
         toast.success("Perfil atualizado!");
@@ -522,36 +571,71 @@ export default function MeuPerfil() {
             </div>
           )}
 
-          {/* Número ativo — instruções pra conectar com o Jarvis */}
-          {profile.phone_number && !isPhoneLocked && !profile.whatsapp_lid && hasActivePlan && (
+          {/* Ativando Jarvis — loading state */}
+          {linkingStatus === 'linking' && profile.phone_number && !isPhoneLocked && (
             <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 text-sm text-blue-200">
-              <Smartphone className="h-4 w-4 shrink-0 mt-0.5" />
+              <Loader2 className="h-4 w-4 shrink-0 mt-0.5 animate-spin" />
               <div className="flex-1">
-                <p className="font-semibold text-blue-100">Número ativo na plataforma!</p>
+                <p className="font-semibold text-blue-100">Ativando seu Jarvis...</p>
                 <p className="mt-1 text-blue-200/80">
-                  Agora ative o agente na aba <span className="font-semibold text-blue-100">Início</span> (toggle de liga/desliga) e depois envie uma mensagem pro Jarvis.
+                  Estamos conectando seu WhatsApp. Aguarde alguns segundos.
                 </p>
-                <p className="mt-2 text-blue-200/80">
-                  Número do Jarvis: <span className="font-mono font-semibold text-blue-100">+55 11 93619-6103</span>
+              </div>
+            </div>
+          )}
+
+          {/* Jarvis pronto — botão pra conversar */}
+          {(linkingStatus === 'pending' || (profile.phone_number && !isPhoneLocked && !profile.whatsapp_lid && hasActivePlan && linkingStatus !== 'linking')) && linkingStatus !== 'idle' && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-sm text-green-200">
+              <CheckCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-green-100">Jarvis ativado! Envie uma mensagem pra ele.</p>
+                <p className="mt-1 text-green-200/80">
+                  Clique no botão abaixo pra abrir o WhatsApp e começar a conversar com o Jarvis.
                 </p>
                 <div className="flex flex-wrap gap-2 mt-3">
                   <a
-                    href="https://wa.me/5511936196103?text=Acabei%20de%20ativar%20meu%20Jarvis!%20%F0%9F%9A%80"
+                    href="https://wa.me/5511936196103?text=Oi%20Jarvis!"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
                     <Button
                       size="sm"
                       variant="default"
-                      className="h-8 text-xs bg-green-600 hover:bg-green-500"
+                      className="h-9 text-sm bg-green-600 hover:bg-green-500 font-semibold"
                     >
-                      <MessageSquare className="mr-1 h-3 w-3" /> Enviar mensagem pro Jarvis
+                      <MessageSquare className="mr-1.5 h-4 w-4" /> Conversar com Jarvis no WhatsApp
                     </Button>
                   </a>
                 </div>
-                <p className="mt-2 text-blue-300/60 text-xs">
-                  Ou envie manualmente uma mensagem pro número <span className="font-mono">+55 11 93619-6103</span> no seu WhatsApp.
+              </div>
+            </div>
+          )}
+
+          {/* Número ativo mas sem whatsapp_lid e idle (usuário antigo que nunca linkou) */}
+          {profile.phone_number && !isPhoneLocked && !profile.whatsapp_lid && hasActivePlan && linkingStatus === 'idle' && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 text-sm text-blue-200">
+              <Smartphone className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-blue-100">Número cadastrado!</p>
+                <p className="mt-1 text-blue-200/80">
+                  Clique em <span className="font-semibold text-blue-100">Salvar</span> novamente ou envie uma mensagem pro Jarvis pra ativar.
                 </p>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <a
+                    href="https://wa.me/5511936196103?text=Oi%20Jarvis!"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="h-9 text-sm bg-green-600 hover:bg-green-500 font-semibold"
+                    >
+                      <MessageSquare className="mr-1.5 h-4 w-4" /> Conversar com Jarvis no WhatsApp
+                    </Button>
+                  </a>
+                </div>
               </div>
             </div>
           )}

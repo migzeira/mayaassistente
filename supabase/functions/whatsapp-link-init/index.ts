@@ -109,6 +109,12 @@ serve(async (req) => {
     // Remove qualquer pending_link antigo
     await (supabase as any).from("pending_whatsapp_links").delete().eq("user_id", userId);
 
+    // Auto-ativa o agente (garante que funcione mesmo se frontend falhou)
+    await (supabase as any)
+      .from("agent_configs")
+      .update({ is_active: true })
+      .eq("user_id", userId);
+
     // Envia mensagem de boas-vindas (não crítica — se falhar, cliente manda "oi" e já tá vinculado)
     const firstName = (profile.display_name ?? "").split(/\s+/)[0] || "";
     const greeting = firstName ? `Oi ${firstName}! 👋` : "Oi! 👋";
@@ -165,6 +171,12 @@ serve(async (req) => {
       expires_at: pendingExpires,
       created_at: new Date().toISOString(),
     }, { onConflict: "user_id" });
+
+  // Auto-ativa o agente (garante que funcione mesmo se frontend falhou)
+  await (supabase as any)
+    .from("agent_configs")
+    .update({ is_active: true })
+    .eq("user_id", userId);
 
   const firstName = (profile.display_name ?? "").split(/\s+/)[0] || "";
   const greeting = firstName ? `Oi ${firstName}! 👋` : "Oi! 👋";
